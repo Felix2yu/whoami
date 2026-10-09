@@ -17,7 +17,7 @@ import (
 )
 
 // 页面渲染需要的模板集合。新增页面只要往这里加一个文件。
-var templateFiles = []string{"templates/index.html.tmpl"}
+var templateFiles = []string{"templates/index.html.tmpl", "templates/stats.html.tmpl"}
 
 type staticAsset struct {
 	data []byte
@@ -31,10 +31,42 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/whoami", s.handleReportJSON)
 	s.mux.HandleFunc("POST /report", s.handleReportFragment)
 	s.mux.HandleFunc("GET /static/", s.handleStatic)
+	s.mux.HandleFunc("GET /stats", s.handleStats)
+	s.mux.HandleFunc("GET /api/stats", s.handleStatsAPI)
+}
+
+// record 落一条访问日志并计入统计。日志里的地址按配置脱敏，
+// 页面上访客仍然看到自己的真实 IP。
+func (s *Server) record(kind string, res Result) {
+	rec := LogRecord{Kind: kind, Result: res}
+	rec.Client.IP = AnonymizeIP(res.Client.addr, s.cfg.AnonymizeIP, s.anonSalt)
+	if err := s.log.Write(rec); err != nil {
+		slog.Warn("access log write failed", "err", err, "id", res.ID)
+	}
+	s.stats.Observe(rec)
+}
+
+func (s *Server) statsView() StatsView {
+	return s.stats.Snapshot(s.log.Dir())
+}
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	s.securityHeaders(w)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := s.tmpl.ExecuteTemplate(w, "stats.html.tmpl", s.statsView()); err != nil {
+		slog.Error("render stats failed", "err", err)
+	}
+}
+
+func (s *Server) handleStatsAPI(w http.ResponseWriter, r *http.Request) {
+	s.securityHeaders(w)
+	writeJSON(w, http.StatusOK, s.statsView())
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	res := s.detectRequest(r)
+	s.record(KindPage, res)
 	view := BuildView(res).applyFraming(framingOf(r))
 
 	s.securityHeaders(w)
@@ -47,6 +79,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	res := s.detectRequest(r)
+	s.record(KindAPI, res)
 	s.securityHeaders(w)
 	writeJSON(w, http.StatusOK, res)
 }
@@ -95,6 +128,7 @@ func (s *Server) handleReportJSON(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, reportStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
+	s.record(KindReport, res)
 	s.securityHeaders(w)
 	writeJSON(w, http.StatusOK, res)
 }
@@ -108,6 +142,7 @@ func (s *Server) handleReportFragment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", reportStatus(err))
 		return
 	}
+	s.record(KindReport, res)
 	view := BuildView(res).applyFraming(framingOf(r))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

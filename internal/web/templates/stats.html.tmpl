@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>访问统计</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="head">
+  <h1>访问统计</h1>
+  <p class="muted">生成于 {{.GeneratedAt.Format "2006-01-02 15:04:05"}} UTC · <a href="/">返回检测页</a></p>
+</header>
+
+{{if not .Enabled}}
+<section class="banner b-unknown">
+  <div class="row"><span class="headline">日志落盘未开启</span></div>
+  <p class="caveat">启动时加上 -log-dir（或 WHOAMI_LOG_DIR）才会有统计。当前内存里的计数只在本次进程有效。</p>
+</section>
+{{end}}
+
+<section class="card">
+  <div class="row"><span class="k">页面访问</span><span class="v">{{.Visits}}</span><span class="score">独立 IP {{.UniqueIPs}}</span></div>
+  {{if .Reports}}<div class="row"><span class="k">浏览器端回报</span><span class="v">{{.Reports}}</span><span class="score">覆盖率 {{printf "%.1f" .JSCoverage}}%</span></div>{{end}}
+  {{if .Replayed}}<p class="d">启动时回放了 {{.Replayed}} 条历史日志重建计数</p>{{end}}
+</section>
+
+{{define "table"}}
+{{if .}}<section class="card">
+  <table class="kv"><tbody>
+  {{range .}}<tr><th>{{.Key}}</th><td>{{.Count}}<span class="score"> {{printf "%.1f" .Pct}}%</span><span class="bar" style="width:{{printf "%.1f" .Pct}}%"></span></td></tr>{{end}}
+  </tbody></table>
+</section>{{end}}
+{{end}}
+
+<h2 class="section">请求头判定的分布</h2>
+{{template "table" .Server.Status}}
+{{template "table" .Server.OS}}
+{{template "table" .Server.Arch}}
+{{template "table" .Server.Browser}}
+{{template "table" .Server.Label}}
+{{template "table" .Server.Host}}
+
+{{if .Merged.Status}}
+<h2 class="section">合并浏览器端回报后的分布</h2>
+{{template "table" .Merged.Status}}
+{{template "table" .Merged.Arch}}
+{{template "table" .Merged.OS}}
+{{template "table" .Merged.Browser}}
+{{end}}
+
+{{if .Daily}}
+<h2 class="section">近 30 天</h2>
+<section class="card">
+  <table class="kv"><tbody>
+  <tr><th>日期</th><td>访问 / 确认 / 疑似 / 未知</td></tr>
+  {{range .Daily}}<tr><th>{{.Date}}</th><td>{{.Visits}} / {{.Confirmed}} / {{.Suspect}} / {{.Unknown}}</td></tr>{{end}}
+  </tbody></table>
+</section>
+{{end}}
+
+<footer>
+  <p class="muted">日志目录 {{if .LogDir}}{{.LogDir}}{{else}}未启用{{end}} · 统计口径：页面访问只计 kind=page，回报单独计数。</p>
+</footer>
+
+</body>
+</html>

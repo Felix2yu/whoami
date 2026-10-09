@@ -118,6 +118,14 @@ summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   margin-bottom: 8px;
 }
 
+.bar { display: block; height: 3px; margin-top: 3px; background: var(--ok); border-radius: 2px; max-width: 100%; }
+
+.section { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--muted); }
+
+h2.section { font-size: 14px; }
+
+a { color: var(--ok); }
+
 .cut { color: var(--warn); font-style: normal; margin-left: 6px; font-size: 11px; }
 
 footer { color: var(--muted); font-size: 12px; margin-top: 16px; }

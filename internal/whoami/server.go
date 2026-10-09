@@ -1,8 +1,10 @@
 package whoami
 
 import (
+	"crypto/rand"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"net/netip"
 	"time"
@@ -30,6 +32,15 @@ type Config struct {
 	// FrameAncestors 是允许用 iframe 嵌入本页的来源白名单。
 	// 留空输出 `frame-ancestors *`：这个页面本来就要嵌进别的页面。
 	FrameAncestors []string
+	// LogDir 是访问日志目录，留空表示不落盘。
+	LogDir string
+	// LogKeepDays 是启动时清理超期日志的天数，0 表示不清理。
+	LogKeepDays int
+	// StatsReplayDays 与 StatsReplayBytes 限定启动回放的范围。
+	StatsReplayDays  int
+	StatsReplayBytes int64
+	// AnonymizeIP 是日志与统计里的地址脱敏方式：off|last-octet|full。
+	AnonymizeIP string
 }
 
 func DefaultConfig() Config {
@@ -41,6 +52,11 @@ func DefaultConfig() Config {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    64 << 10,
 		MaxPostBytes:      32 << 10,
+		LogDir:            "data/logs",
+		LogKeepDays:       90,
+		StatsReplayDays:   7,
+		StatsReplayBytes:  20 << 20,
+		AnonymizeIP:       "off",
 	}
 }
 
@@ -53,6 +69,9 @@ type Server struct {
 	detector  *Detector
 	tmpl      *template.Template
 	assets    map[string]staticAsset
+	log       *AccessLog
+	stats     *Stats
+	anonSalt  []byte
 	mux       *http.ServeMux
 }
 
@@ -79,9 +98,33 @@ func NewServer(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("WHOAMI_FRAME_ANCESTORS: %w", err)
 		}
 	}
+	switch cfg.AnonymizeIP {
+	case "", "off", "last-octet", "full":
+	default:
+		return nil, fmt.Errorf("WHOAMI_ANONYMIZE_IP=%q 不合法，可选 off|last-octet|full", cfg.AnonymizeIP)
+	}
+
+	accessLog, err := NewAccessLog(cfg.LogDir, cfg.LogKeepDays)
+	if err != nil {
+		return nil, fmt.Errorf("打开日志目录失败: %w", err)
+	}
+	stats := NewStats()
+	if n, err := stats.Replay(accessLog, cfg.StatsReplayDays, cfg.StatsReplayBytes); err != nil {
+		slog.Warn("日志回放失败，统计从零开始", "err", err, "dir", accessLog.Dir())
+	} else if n > 0 {
+		stats.ReplayDone(n)
+		slog.Info("stats replayed", "records", n, "days", cfg.StatsReplayDays)
+	}
+
+	var salt [8]byte
+	if _, err := rand.Read(salt[:]); err != nil {
+		return nil, fmt.Errorf("生成脱敏盐值失败: %w", err)
+	}
+
 	s := &Server{
 		cfg: cfg, ancestors: cfg.FrameAncestors, trusted: trusted, dict: NewIPDict(cfg.IPDictPath),
-		detector: detector, tmpl: tmpl, assets: assets, mux: http.NewServeMux(),
+		detector: detector, tmpl: tmpl, assets: assets,
+		log: accessLog, stats: stats, anonSalt: salt[:], mux: http.NewServeMux(),
 	}
 	s.routes()
 	return s, nil
@@ -92,6 +135,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) Addr() string { return s.cfg.Addr }
+
+// Stats 暴露统计聚合，供 /stats、/api/stats 与测试使用。
+func (s *Server) Stats() *Stats { return s.stats }
+
+// Close 关闭日志文件，进程退出时调用。
+func (s *Server) Close() error { return s.log.Close() }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")

@@ -6,5 +6,5 @@ import "embed"
 
 // Static 是页面模板与前端资源。追加文件只需要往下面的列表里加一行。
 //
-//go:embed templates/index.html.tmpl static/app.css static/detect.js
+//go:embed templates/index.html.tmpl templates/stats.html.tmpl static/app.css static/detect.js
 var Static embed.FS
