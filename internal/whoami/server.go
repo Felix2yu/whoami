@@ -24,6 +24,8 @@ type Config struct {
 	// TrustedProxies 是受信反向代理的 CIDR 列表。默认为空 = 不信任任何代理头，
 	// 只有直连地址落在这些网段内才会去读 X-Forwarded-For。
 	TrustedProxies []string
+	// IPDictPath 是访客 IP 归属字典（`CIDR,标签`）的路径，留空表示不标注归属。
+	IPDictPath string
 }
 
 func DefaultConfig() Config {
@@ -42,6 +44,7 @@ func DefaultConfig() Config {
 type Server struct {
 	cfg     Config
 	trusted []*netip.Prefix
+	dict    *IPDict
 	mux     *http.ServeMux
 }
 
@@ -50,7 +53,7 @@ func NewServer(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("WHOAMI_TRUSTED_PROXIES: %w", err)
 	}
-	s := &Server{cfg: cfg, trusted: trusted, mux: http.NewServeMux()}
+	s := &Server{cfg: cfg, trusted: trusted, dict: NewIPDict(cfg.IPDictPath), mux: http.NewServeMux()}
 	s.routes()
 	return s, nil
 }

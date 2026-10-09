@@ -19,9 +19,11 @@ func main() {
 	cfg := whoami.DefaultConfig()
 	addr := flag.String("addr", envOr("WHOAMI_ADDR", cfg.Addr), "监听地址")
 	proxies := flag.String("trusted-proxies", envOr("WHOAMI_TRUSTED_PROXIES", ""), "受信反向代理 CIDR，逗号分隔；留空表示不信任任何代理头")
+	ipDict := flag.String("ip-dict", envOr("WHOAMI_IP_DICT", ""), "IP 归属字典路径，格式为每行 `CIDR,标签`，改完约 10 秒内自动生效")
 	flag.Parse()
 	cfg.Addr = *addr
 	cfg.TrustedProxies = splitList(*proxies)
+	cfg.IPDictPath = *ipDict
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)

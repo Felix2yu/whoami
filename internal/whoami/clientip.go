@@ -18,6 +18,8 @@ type IPInfo struct {
 	Label    string   `json:"label"`  // IP 字典命中的归属标签
 	Note     string   `json:"note,omitempty"`
 	Hostname string   `json:"hostname,omitempty"` // 反查失败则不填
+
+	addr netip.Addr // 解析后的地址，供字典与统计复用
 }
 
 // 内网/保留段：不依赖外部字典也能判出来，页面据此说明「这不是公网 IP」。
@@ -158,6 +160,7 @@ func ResolveClientIP(r *http.Request, trusted []*netip.Prefix) (IPInfo, []Eviden
 
 func finalizeIP(info IPInfo, addr netip.Addr, ev []Evidence) (IPInfo, []Evidence) {
 	addr = addrKey(addr)
+	info.addr = addr
 	info.IP = addr.String()
 	switch {
 	case !addr.IsValid():
