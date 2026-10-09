@@ -95,6 +95,17 @@ func BuildView(res Result) View {
 			v.Extras = append(v.Extras, c)
 		}
 	}
+	for _, c := range geoCards(res) {
+		v.Extras = append(v.Extras, c)
+	}
+
+	if res.GeoProvider != "" {
+		v.Banner.Limits = append(v.Banner.Limits,
+			"归属信息来自外部接口 "+res.GeoProvider+"，启用它意味着已把访客 IP 交给该接口")
+	}
+	if res.GeoNote != "" {
+		v.Banner.Limits = append(v.Banner.Limits, res.GeoNote)
+	}
 
 	if res.HasJS {
 		v.JSStatus = "已合并浏览器端回报（Client Hints / WebGL），结论经过跨源交叉验证"
@@ -218,6 +229,21 @@ func browserCards(b BrowserFacts) []Card {
 		{Key: "gpuRaw", Title: "GPU", Value: b.GPU},
 		{Key: "hints", Title: "Client Hints", Value: b.HintsSource},
 	}
+}
+
+// geoCards 是外部归属接口的结果，一个字段一行，取不到就不排。
+func geoCards(res Result) []Card {
+	var out []Card
+	for _, g := range res.Geo {
+		if g.Value == "" {
+			continue
+		}
+		out = append(out, Card{
+			Key: "geo", Title: "归属 · " + g.Key, Value: g.Value,
+			Detail: "来自外部接口 " + res.GeoProvider,
+		})
+	}
+	return out
 }
 
 func intString(v int) string {

@@ -191,6 +191,7 @@ func (s *Server) detectWithReport(w http.ResponseWriter, r *http.Request) (Resul
 	if !containsStr(res.Sources, SourceJS) {
 		res.Sources = append(res.Sources, SourceJS)
 	}
+	s.attachGeo(r, &res)
 	s.decorate(&res, r)
 	return res, nil
 }
@@ -200,6 +201,7 @@ func (s *Server) detectRequest(r *http.Request) Result {
 	ss, ev, ip := s.collect(r)
 	res := s.detector.Detect(ss, ev, ip)
 	res.ID = NewID()
+	s.attachGeo(r, &res)
 	s.decorate(&res, r)
 	return res
 }
@@ -224,7 +226,21 @@ func (s *Server) collect(r *http.Request) (Signals, []Evidence, IPInfo) {
 		ss = append(ss, Signal{Field: FieldIPLabel, Value: label, Source: SourceIP, EvidenceKey: key})
 	}
 
+	// 归属信息默认不查：noop provider 在这里一次外呼都不发。
 	return ss, ev, ip
+}
+
+// attachGeo 把外部归属接口的结果并入结果集，失败只降级不影响主判定。
+func (s *Server) attachGeo(r *http.Request, res *Result) {
+	if s.geo == nil || !s.geo.Enabled() {
+		return
+	}
+	geo, note := lookupGeo(r.Context(), s.geo, res.Client.addr)
+	res.Geo = geo
+	res.GeoProvider = s.geo.Name()
+	if note != "" {
+		res.GeoNote = note
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

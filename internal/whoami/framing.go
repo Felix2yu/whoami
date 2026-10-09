@@ -96,7 +96,7 @@ func splitKeys(list string) []string {
 func allCardKeys() []string {
 	return []string{
 		"ip", CatOS, CatCPU, CatBrowser, CatGPU, CatPlatform, CatEngine,
-		"cores", "memory", "screen", "timezone", "model", "platformV", "gpuRaw", "hints",
+		"cores", "memory", "screen", "timezone", "model", "platformV", "gpuRaw", "hints", "geo",
 		"extras", "evidence",
 	}
 }

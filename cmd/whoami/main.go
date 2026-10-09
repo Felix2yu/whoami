@@ -27,6 +27,8 @@ func main() {
 	anon := flag.String("anonymize-ip", envOr("WHOAMI_ANONYMIZE_IP", cfg.AnonymizeIP), "日志与统计里的地址脱敏：off|last-octet|full")
 	replayDays := flag.Int("stats-replay-days", envIntOr("WHOAMI_STATS_REPLAY_DAYS", cfg.StatsReplayDays), "启动时回放最近多少天日志重建统计")
 	rules := flag.String("rules", envOr("WHOAMI_RULES", ""), "外部规则 JSON 路径，同 ID 覆盖内置规则")
+	geoEndpoint := flag.String("ip-geo-endpoint", envOr("WHOAMI_IP_GEO_ENDPOINT", ""), "IP 归属查询接口，{ip} 会被替换成访客地址；留空表示不外呼")
+	geoFields := flag.String("ip-geo-fields", envOr("WHOAMI_IP_GEO_FIELDS", ""), "归属接口响应里要取的字段，逗号分隔")
 	flag.Parse()
 	cfg.Addr = *addr
 	cfg.TrustedProxies = splitList(*proxies)
@@ -37,6 +39,8 @@ func main() {
 	cfg.AnonymizeIP = *anon
 	cfg.StatsReplayDays = *replayDays
 	cfg.RulesPath = *rules
+	cfg.GeoEndpoint = *geoEndpoint
+	cfg.GeoFields = splitList(*geoFields)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)

@@ -43,6 +43,10 @@ type Config struct {
 	AnonymizeIP string
 	// RulesPath 是外部规则 JSON 文件路径，同 ID 覆盖内置规则。
 	RulesPath string
+	// GeoEndpoint 是 IP 归属查询接口，留空表示不外呼。
+	// 注意：启用它意味着把访客 IP 交给第三方，默认关闭。
+	GeoEndpoint string
+	GeoFields   []string
 }
 
 func DefaultConfig() Config {
@@ -73,6 +77,7 @@ type Server struct {
 	assets    map[string]staticAsset
 	log       *AccessLog
 	stats     *Stats
+	geo       IpInfoProvider
 	rulesFrom RulesSource
 	anonSalt  []byte
 	mux       *http.ServeMux
@@ -129,6 +134,19 @@ func NewServer(cfg Config) (*Server, error) {
 		slog.Info("stats replayed", "records", n, "days", cfg.StatsReplayDays)
 	}
 
+	geo := IpInfoProvider(noopProvider{})
+	if cfg.GeoEndpoint != "" {
+		g := DefaultGeoConfig()
+		g.Endpoint = cfg.GeoEndpoint
+		if len(cfg.GeoFields) > 0 {
+			g.Fields = cfg.GeoFields
+		}
+		geo, err = NewHTTPGeoProvider(g)
+		if err != nil {
+			return nil, fmt.Errorf("WHOAMI_IP_GEO_ENDPOINT: %w", err)
+		}
+	}
+
 	var salt [8]byte
 	if _, err := rand.Read(salt[:]); err != nil {
 		return nil, fmt.Errorf("生成脱敏盐值失败: %w", err)
@@ -137,7 +155,7 @@ func NewServer(cfg Config) (*Server, error) {
 	s := &Server{
 		cfg: cfg, ancestors: cfg.FrameAncestors, trusted: trusted, dict: NewIPDict(cfg.IPDictPath),
 		detector: detector, tmpl: tmpl, assets: assets,
-		log: accessLog, stats: stats, rulesFrom: rulesFrom, anonSalt: salt[:], mux: http.NewServeMux(),
+		log: accessLog, stats: stats, geo: geo, rulesFrom: rulesFrom, anonSalt: salt[:], mux: http.NewServeMux(),
 	}
 	s.routes()
 	return s, nil

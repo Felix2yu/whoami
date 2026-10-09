@@ -142,4 +142,8 @@ type Result struct {
 	// Embedded 说明本次请求是被别的页面用 iframe 嵌入发起的。
 	Embedded bool   `json:"embedded,omitempty"`
 	Host     string `json:"host,omitempty"`
+	// Geo 是外部归属接口的结果，未启用接口时为空。
+	Geo         Geo    `json:"geo,omitempty"`
+	GeoProvider string `json:"geoProvider,omitempty"`
+	GeoNote     string `json:"geoNote,omitempty"`
 }
