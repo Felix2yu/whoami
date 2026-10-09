@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iframe 嵌入实测</title>
+<style>
+  body { font: 14px/1.6 ui-sans-serif, -apple-system, "PingFang SC", sans-serif; margin: 24px; }
+  h1 { font-size: 16px; }
+  .case { margin-bottom: 24px; }
+  .case h2 { font-size: 13px; font-weight: 600; margin: 0 0 6px; color: #555; }
+  iframe { border: 1px solid #ddd; border-radius: 6px; width: 100%; height: 560px; }
+  .narrow { width: 335px; }
+  code { background: #f4f4f5; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>whoami iframe 嵌入实测</h1>
+<p>这个页面故意跑在另一个端口（<code>python3 -m http.server 9099 -d examples</code>），
+和 <code>http://127.0.0.1:8080</code> 构成跨源嵌入，用来验证真实场景。</p>
+
+<div class="case">
+  <h2>1. 默认嵌入：应自动进紧凑版式，JS 回报同源成功，IP 是访客真实地址</h2>
+  <iframe src="http://127.0.0.1:8080/" title="默认嵌入"></iframe>
+</div>
+
+<div class="case">
+  <h2>2. 335px 窄容器：控件必须一行摆完，不出横向滚动条</h2>
+  <iframe class="narrow" src="http://127.0.0.1:8080/" title="窄视口嵌入"></iframe>
+</div>
+
+<div class="case">
+  <h2>3. 只留设备信息，隐藏 IP 行（<code>?hide=ip</code>）— 保留你旧的 IP iframe 时用这个</h2>
+  <iframe src="http://127.0.0.1:8080/?hide=ip" title="隐藏 IP 行"></iframe>
+</div>
+
+<div class="case">
+  <h2>4. <code>sandbox</code> 不给 allow-scripts：JS 不执行，页面要显式说明只用了服务端信号</h2>
+  <iframe sandbox src="http://127.0.0.1:8080/" title="禁用脚本的嵌入"></iframe>
+</div>
+
+<div class="case">
+  <h2>5. 收紧 <code>allow</code> 之外还带 <code>?embed=0</code>：强制完整版式，验证参数能覆盖自动判定</h2>
+  <iframe src="http://127.0.0.1:8080/?embed=0"
+          allow="ch-ua-arch; ch-ua-model; ch-ua-platform; ch-ua-platform-version; ch-ua-full-version-list"
+          title="强制完整版式"></iframe>
+</div>
+
+<p>另开一个终端验证响应头里只有 <code>frame-ancestors</code>，没有 X-Frame-Options 与 COEP/CORP：</p>
+<pre><code>curl -si http://127.0.0.1:8080/ | grep -iE 'x-frame-options|cross-origin|content-security-policy'</code></pre>
+</body>
+</html>
