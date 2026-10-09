@@ -6,12 +6,24 @@ import (
 	"testing"
 )
 
+// newTestServer 默认关掉日志落盘，测试不往仓库里写文件。
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
-	s, err := NewServer(DefaultConfig())
+	return newLoggingTestServer(t, "")
+}
+
+func newLoggingTestServer(t *testing.T, dir string) *Server {
+	t.Helper()
+	cfg := DefaultConfig()
+	cfg.LogDir = dir
+	if dir == "" {
+		cfg.LogDir = ""
+	}
+	s, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
+	t.Cleanup(func() { s.Close() })
 	return s
 }
 
