@@ -1,7 +1,9 @@
 package whoami
 
 import (
+	"fmt"
 	"net/http"
+	"net/netip"
 	"time"
 )
 
@@ -19,6 +21,9 @@ type Config struct {
 	MaxHeaderBytes int
 	// MaxPostBytes 是 JS 回报的体积上限，实际 payload 2–4KB。
 	MaxPostBytes int64
+	// TrustedProxies 是受信反向代理的 CIDR 列表。默认为空 = 不信任任何代理头，
+	// 只有直连地址落在这些网段内才会去读 X-Forwarded-For。
+	TrustedProxies []string
 }
 
 func DefaultConfig() Config {
@@ -35,14 +40,19 @@ func DefaultConfig() Config {
 
 // Server 持有各子模块，实现 http.Handler。
 type Server struct {
-	cfg Config
-	mux *http.ServeMux
+	cfg     Config
+	trusted []*netip.Prefix
+	mux     *http.ServeMux
 }
 
-func NewServer(cfg Config) *Server {
-	s := &Server{cfg: cfg, mux: http.NewServeMux()}
+func NewServer(cfg Config) (*Server, error) {
+	trusted, err := ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		return nil, fmt.Errorf("WHOAMI_TRUSTED_PROXIES: %w", err)
+	}
+	s := &Server{cfg: cfg, trusted: trusted, mux: http.NewServeMux()}
 	s.routes()
-	return s
+	return s, nil
 }
 
 func (s *Server) routes() {

@@ -8,7 +8,23 @@ import (
 
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
-	return NewServer(DefaultConfig())
+	s, err := NewServer(DefaultConfig())
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	return s
+}
+
+func TestNewServerRejectsBadTrustedProxies(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.TrustedProxies = []string{"10.0.0.0/8", "not-a-cidr"}
+	if _, err := NewServer(cfg); err == nil {
+		t.Fatal("want error for invalid CIDR, got nil")
+	}
+	cfg.TrustedProxies = []string{"10.0.0.0/8", "", " ::1/128 "}
+	if _, err := NewServer(cfg); err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
 }
 
 func do(s *Server, method, target string) *httptest.ResponseRecorder {
@@ -56,7 +72,11 @@ func TestDefaultTimeoutsAreSizedForSmallJSONPayloads(t *testing.T) {
 
 func TestHTTPServerCarriesConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	hs := NewServer(cfg).HTTPServer()
+	s, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	hs := s.HTTPServer()
 	if hs.Addr != cfg.Addr || hs.ReadHeaderTimeout != cfg.ReadHeaderTimeout ||
 		hs.ReadTimeout != cfg.ReadTimeout || hs.WriteTimeout != cfg.WriteTimeout ||
 		hs.IdleTimeout != cfg.IdleTimeout || hs.MaxHeaderBytes != cfg.MaxHeaderBytes {

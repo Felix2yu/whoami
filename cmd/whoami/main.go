@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,13 +18,19 @@ import (
 func main() {
 	cfg := whoami.DefaultConfig()
 	addr := flag.String("addr", envOr("WHOAMI_ADDR", cfg.Addr), "监听地址")
+	proxies := flag.String("trusted-proxies", envOr("WHOAMI_TRUSTED_PROXIES", ""), "受信反向代理 CIDR，逗号分隔；留空表示不信任任何代理头")
 	flag.Parse()
 	cfg.Addr = *addr
+	cfg.TrustedProxies = splitList(*proxies)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	srv := whoami.NewServer(cfg)
+	srv, err := whoami.NewServer(cfg)
+	if err != nil {
+		logger.Error("invalid configuration", "err", err)
+		os.Exit(1)
+	}
 	httpSrv := srv.HTTPServer()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -57,4 +64,14 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func splitList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
