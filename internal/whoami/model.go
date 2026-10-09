@@ -138,16 +138,3 @@ type Result struct {
 	Sources []string `json:"sources"`
 	HasJS   bool     `json:"hasJs"`
 }
-
-// Card 是页面上的一行结论。
-type Card struct {
-	Category   string
-	Title      string
-	Name       string
-	Confidence int
-	Status     string
-	Reason     string
-	Limit      string
-	Evidence   []Evidence
-	Notes      []string
-}

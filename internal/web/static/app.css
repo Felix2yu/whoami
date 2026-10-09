@@ -1,0 +1,132 @@
+:root {
+  --fg: #16181d;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --bg: #fff;
+  --card: #f9fafb;
+  --ok: #0f766e;
+  --ok-bg: #ecfdf5;
+  --warn: #92400e;
+  --warn-bg: #fffbeb;
+  --unknown: #374151;
+  --unknown-bg: #f3f4f6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e5e7eb;
+    --muted: #9ca3af;
+    --line: #2b2f36;
+    --bg: #14161a;
+    --card: #1b1e24;
+    --ok: #6ee7b7;
+    --ok-bg: #052e26;
+    --warn: #fcd34d;
+    --warn-bg: #3a2c05;
+    --unknown: #cbd5e1;
+    --unknown-bg: #262a31;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0 auto;
+  padding: 20px 16px 32px;
+  max-width: 46rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.6 ui-sans-serif, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.head { margin-bottom: 12px; }
+.head h1 { margin: 0 0 2px; font-size: 18px; font-weight: 600; }
+
+.muted { color: var(--muted); font-size: 12px; }
+
+/* 关键约束：一行必须摆完，窄视口靠省略号而不是换行 */
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.row .k { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.row .v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .headline { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.row .badge, .row .score { flex: 0 0 auto; white-space: nowrap; }
+
+.badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--unknown-bg);
+  color: var(--unknown);
+}
+
+.badge.sm { margin-left: 6px; font-size: 11px; padding: 0 6px; }
+.b-confirmed { background: var(--ok-bg); color: var(--ok); }
+.b-suspect { background: var(--warn-bg); color: var(--warn); }
+.b-unknown { background: var(--unknown-bg); color: var(--unknown); }
+
+.score { font-size: 12px; color: var(--muted); }
+
+.banner {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--unknown);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--card);
+}
+
+.banner.b-confirmed { border-left-color: var(--ok); }
+.banner.b-suspect { border-left-color: var(--warn); }
+.banner .headline { font-size: 16px; }
+.banner p { margin: 6px 0 0; }
+.reason { margin: 0; }
+.caveat, .limit { color: var(--muted); font-size: 12px; }
+
+main { display: block; }
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--card);
+}
+
+.card .v { font-size: 15px; }
+.card p { margin: 4px 0 0; }
+.card .d, .card .src, .card .note { color: var(--muted); font-size: 12px; }
+
+details { margin-top: 6px; }
+summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+
+.kv { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 6px; }
+.kv th { width: 38%; text-align: left; vertical-align: top; color: var(--muted); font-weight: 400; }
+.kv th, .kv td { border-top: 1px solid var(--line); padding: 4px 0; word-break: break-all; }
+.kv td { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+.more {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+}
+
+.cut { color: var(--warn); font-style: normal; margin-left: 6px; font-size: 11px; }
+
+footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
+
+/* 紧凑模式：嵌进别人页面的 iframe 时去掉标题与留白 */
+body.compact { padding: 8px 8px 10px; max-width: none; }
+body.compact .head h1 { display: none; }
+body.compact .head { margin-bottom: 6px; }
+body.compact .banner, body.compact .card { padding: 8px 10px; margin-bottom: 6px; }
+body.compact .card .v { font-size: 14px; }
+body.compact .banner .headline { font-size: 15px; }
+body.compact footer { margin-top: 8px; }

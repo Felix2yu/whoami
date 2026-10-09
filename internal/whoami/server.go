@@ -2,6 +2,7 @@ package whoami
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/netip"
 	"time"
@@ -42,10 +43,13 @@ func DefaultConfig() Config {
 
 // Server 持有各子模块，实现 http.Handler。
 type Server struct {
-	cfg     Config
-	trusted []*netip.Prefix
-	dict    *IPDict
-	mux     *http.ServeMux
+	cfg      Config
+	trusted  []*netip.Prefix
+	dict     *IPDict
+	detector *Detector
+	tmpl     *template.Template
+	assets   map[string]staticAsset
+	mux      *http.ServeMux
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -53,13 +57,25 @@ func NewServer(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("WHOAMI_TRUSTED_PROXIES: %w", err)
 	}
-	s := &Server{cfg: cfg, trusted: trusted, dict: NewIPDict(cfg.IPDictPath), mux: http.NewServeMux()}
+	detector, err := NewDetector(BuiltinRules())
+	if err != nil {
+		return nil, fmt.Errorf("规则表无效: %w", err)
+	}
+	tmpl, err := loadTemplates()
+	if err != nil {
+		return nil, fmt.Errorf("页面模板无效: %w", err)
+	}
+	assets, err := loadAssets()
+	if err != nil {
+		return nil, fmt.Errorf("静态资源无效: %w", err)
+	}
+
+	s := &Server{
+		cfg: cfg, trusted: trusted, dict: NewIPDict(cfg.IPDictPath),
+		detector: detector, tmpl: tmpl, assets: assets, mux: http.NewServeMux(),
+	}
 	s.routes()
 	return s, nil
-}
-
-func (s *Server) routes() {
-	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

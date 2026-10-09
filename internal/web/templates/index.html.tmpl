@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>访客设备信息</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="{{if .Compact}}compact{{end}}">
+
+<header class="head">
+  <h1>访客设备信息</h1>
+  <p class="muted">{{.JSStatus}}</p>
+</header>
+
+<section class="banner b-{{.Banner.Status}}">
+  <div class="row">
+    <span class="headline">{{.Banner.Title}}</span>
+    <span class="badge">{{.Banner.Label}}</span>
+    {{if ne .Banner.Status "unknown"}}<span class="score">判定分 {{.Banner.Score}}</span>{{end}}
+  </div>
+  {{range .Banner.Reasons}}<p class="reason">{{.}}</p>{{end}}
+  {{if .Banner.Caveat}}<p class="caveat">{{.Banner.Caveat}}</p>{{end}}
+  {{range .Banner.Limits}}<p class="limit">{{.}}</p>{{end}}
+</section>
+
+<main>
+{{range .Cards}}
+  <article class="card">
+    <div class="row">
+      <span class="k">{{.Title}}</span>
+      <span class="v" title="{{.Value}}">{{.Value}}</span>
+      {{if .Label}}<span class="badge b-{{.Status}}">{{.Label}}</span>{{end}}
+    </div>
+    {{if .Detail}}<p class="d">{{.Detail}}</p>{{end}}
+    {{if .Sources}}<p class="src">来源：{{$first := true}}{{range .Sources}}{{if $first}}{{$first = false}}{{else}} + {{end}}{{.}}{{end}}</p>{{end}}
+    {{range .Notes}}<p class="note">{{.}}</p>{{end}}
+    {{if .Evidence}}<details><summary>原始证据</summary>
+      <table class="kv"><tbody>
+      {{range .Evidence}}<tr><th>{{.Key}}</th><td>{{.Raw}}{{if .Truncated}}<em class="cut">已截断</em>{{end}}</td></tr>{{end}}
+      </tbody></table>
+    </details>{{end}}
+  </article>
+{{end}}
+
+{{if .Extras}}
+  <details class="more" open><summary>其它信号（{{len .Extras}} 条）</summary>
+    <table class="kv"><tbody>
+    {{range .Extras}}<tr><th>{{.Title}}</th><td>{{.Value}}<span class="badge sm b-{{.Status}}">{{.Label}}</span>{{if .Detail}}<br><span class="muted">{{.Detail}}</span>{{end}}</td></tr>{{end}}
+    </tbody></table>
+  </details>
+{{end}}
+
+{{if .Evidence}}
+  <details class="more"><summary>本次请求的原始证据（{{len .Evidence}} 条）</summary>
+    <table class="kv"><tbody>
+    {{range .Evidence}}<tr><th>{{.Key}}</th><td>{{.Raw}}{{if .Truncated}}<em class="cut">已截断</em>{{end}}</td></tr>{{end}}
+    </tbody></table>
+  </details>
+{{end}}
+</main>
+
+<footer>
+  <p>结论由请求头与浏览器端回报推断，可被 DevTools 或代理伪造，仅供自助排查与终端盘点，不作为准入依据。</p>
+  <p class="muted">记录 ID {{.Result.ID}} · {{.Result.Time.Format "2006-01-02 15:04:05"}} UTC</p>
+</footer>
+
+</body>
+</html>
