@@ -1,5 +1,7 @@
 package whoami
 
+import "time"
+
 // Signal 来源标签，用于跨源交叉验证：同一事实被几个独立来源说出，可信度不同。
 const (
 	SourceConn   = "conn"   // 连接层：RemoteAddr
@@ -109,7 +111,8 @@ type Finding struct {
 	EvidenceKeys []string `json:"evidenceKeys"`
 
 	Confidence int      `json:"confidence"` // 证据强度：跨源一致会抬升，冲突会压低
-	Score      int      `json:"score"`      // 信创判定分：被 Ceiling 压制后的结果
+	Ceiling    int      `json:"ceiling"`    // 该类信号单独能把信创判定推到的上限
+	Score      int      `json:"score"`      // 信创判定分 = min(Confidence, Ceiling)，非信创信号为 0
 	Notes      []string `json:"notes,omitempty"`
 	Verified   bool     `json:"verified"`
 }
@@ -120,4 +123,31 @@ type Verdict struct {
 	Score   int      `json:"score"`
 	Reasons []string `json:"reasons"`
 	Limits  []string `json:"limits"`
+}
+
+// Result 是一次检测的完整输出：JSON 端点与页面渲染共用同一个结构。
+type Result struct {
+	ID       string     `json:"id"`
+	Time     time.Time  `json:"time"`
+	Client   IPInfo     `json:"client"`
+	Findings []Finding  `json:"findings"`
+	Verdict  Verdict    `json:"verdict"`
+	Evidence []Evidence `json:"evidence"`
+	Signals  Signals    `json:"signals"`
+	// Sources 是本次参与判定的来源集合，页面据此提示「仅服务端信号」。
+	Sources []string `json:"sources"`
+	HasJS   bool     `json:"hasJs"`
+}
+
+// Card 是页面上的一行结论。
+type Card struct {
+	Category   string
+	Title      string
+	Name       string
+	Confidence int
+	Status     string
+	Reason     string
+	Limit      string
+	Evidence   []Evidence
+	Notes      []string
 }
