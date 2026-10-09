@@ -146,6 +146,34 @@ func TestSameFactIsNotAConflict(t *testing.T) {
 	}
 }
 
+// UA 被冻结成 x86_64、Client Hints 说出 loongarch 是真机上常见的组合：
+// 结论应该跟更硬的信号走，但矛盾必须写在页面上。
+func TestHarderSignalWinsButDisagreementIsNoted(t *testing.T) {
+	d := builtinDetector(t)
+	ss := Signals{
+		sig(FieldUA, "Mozilla/5.0 (X11; Linux x86_64) Chrome/120", SourceHeader),
+		sig(FieldArch, "x86_64", SourceHeader),
+		sig(FieldArch, "loongarch64", SourceJS),
+	}
+	fs, v := d.score(ss)
+	if v.Status != "confirmed" || v.Score != 100 {
+		t.Errorf("龙芯信号应压过被冻结的 UA：%+v", v)
+	}
+	var noted bool
+	for _, f := range fs {
+		if f.Name == "龙芯 LoongArch" {
+			for _, n := range f.Notes {
+				if strings.Contains(n, "不一致的信号") && strings.Contains(n, "x86") {
+					noted = true
+				}
+			}
+		}
+	}
+	if !noted {
+		t.Errorf("矛盾没写进页面：%+v", fs)
+	}
+}
+
 func TestPlatformSuppressionBlocksArmFalsePositive(t *testing.T) {
 	d := builtinDetector(t)
 	// 安卓机上报 ARM：平台规则应压制 ARM 的信创含义。

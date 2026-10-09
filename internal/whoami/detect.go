@@ -222,31 +222,56 @@ func applySuppressions(fs []Finding, byID map[string]Rule) {
 	}
 }
 
-// detectConflicts 只在「两个信创结论互相打架」时降权。
-// 同类别里 ARM 与 ARM32、Chrome 与 Edge 这类并存事实不是矛盾，
+// detectConflicts 处理「同一类别出现不同结论」，分两档：
+//   - 两个信创结论互斥（UA 里同时出现 UOS 与 Kylin）：双双降到疑似，两条都留着；
+//   - 只有一个信创结论，另一个同类信号与它不一致（UA 报 x86_64、Client Hints 报 loongarch）：
+//     不降分——更硬的架构信号本来就是用来纠正被冻结的 UA 的——但必须把矛盾写在页面上，
+//     让人自己判断这是真机还是伪造。
+//
+// 同类别里 ARM 与 ARM32、Chrome 与 Edge 这类「没有信创结论参与」的并存不是矛盾，
 // 无差别降权会把正常机器全判成疑似。
 func detectConflicts(fs []Finding) {
 	byCat := map[string][]int{}
+	var cats []string
 	for i, f := range fs {
+		if _, seen := byCat[f.Category]; !seen {
+			cats = append(cats, f.Category)
+		}
 		byCat[f.Category] = append(byCat[f.Category], i)
 	}
-	for _, idx := range byCat {
-		var xcNames []string
+	for _, cat := range cats {
+		idx := byCat[cat]
+		var names, xcNames []string
 		for _, i := range idx {
-			if fs[i].Xinchuang {
+			if !containsStr(names, fs[i].Name) {
+				names = append(names, fs[i].Name)
+			}
+			if fs[i].Xinchuang && !containsStr(xcNames, fs[i].Name) {
 				xcNames = append(xcNames, fs[i].Name)
 			}
 		}
-		if len(xcNames) < 2 || sameStrings(xcNames) {
+		if len(names) < 2 || len(xcNames) == 0 {
 			continue
 		}
+		hardConflict := len(xcNames) >= 2
 		for _, i := range idx {
 			if !fs[i].Xinchuang {
 				continue
 			}
-			fs[i].Confidence = min(fs[i].Confidence, conflictCap)
+			var others []string
+			for _, n := range names {
+				if n != fs[i].Name {
+					others = append(others, n)
+				}
+			}
+			if hardConflict {
+				fs[i].Confidence = min(fs[i].Confidence, conflictCap)
+				fs[i].Notes = append(fs[i].Notes,
+					fmt.Sprintf("同类别同时出现互斥的信创结论（%s），两条都只能算疑似", strings.Join(xcNames, "、")))
+				continue
+			}
 			fs[i].Notes = append(fs[i].Notes,
-				fmt.Sprintf("同类别同时出现互斥的信创结论（%s），两条都只能算疑似", strings.Join(xcNames, "、")))
+				fmt.Sprintf("同类别还有不一致的信号（%s），以更硬的信号为准，但值得你自己核一下", strings.Join(others, "、")))
 		}
 	}
 }
