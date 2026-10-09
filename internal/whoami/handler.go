@@ -32,8 +32,9 @@ func (s *Server) routes() {
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	res := s.detectRequest(r)
-	view := BuildView(res)
+	view := BuildView(res).applyFraming(framingOf(r))
 
+	s.securityHeaders(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := s.tmpl.ExecuteTemplate(w, "index.html.tmpl", view); err != nil {
@@ -43,7 +44,15 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	res := s.detectRequest(r)
+	s.securityHeaders(w)
 	writeJSON(w, http.StatusOK, res)
+}
+
+// securityHeaders 只锁「谁能嵌我」，不设 X-Frame-Options 与 COEP/CORP：
+// 前者会被 CSP 取代，后者会让跨源 iframe 直接白屏。
+func (s *Server) securityHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Security-Policy", frameAncestorsDirective(s.ancestors))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
@@ -53,6 +62,7 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	s.securityHeaders(w)
 	w.Header().Set("Content-Type", contentType(name))
 	w.Header().Set("ETag", asset.etag)
 	w.Header().Set("Cache-Control", "public, max-age=3600")

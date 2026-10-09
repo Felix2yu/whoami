@@ -27,6 +27,9 @@ type Config struct {
 	TrustedProxies []string
 	// IPDictPath 是访客 IP 归属字典（`CIDR,标签`）的路径，留空表示不标注归属。
 	IPDictPath string
+	// FrameAncestors 是允许用 iframe 嵌入本页的来源白名单。
+	// 留空输出 `frame-ancestors *`：这个页面本来就要嵌进别的页面。
+	FrameAncestors []string
 }
 
 func DefaultConfig() Config {
@@ -43,13 +46,14 @@ func DefaultConfig() Config {
 
 // Server 持有各子模块，实现 http.Handler。
 type Server struct {
-	cfg      Config
-	trusted  []*netip.Prefix
-	dict     *IPDict
-	detector *Detector
-	tmpl     *template.Template
-	assets   map[string]staticAsset
-	mux      *http.ServeMux
+	cfg       Config
+	ancestors []string
+	trusted   []*netip.Prefix
+	dict      *IPDict
+	detector  *Detector
+	tmpl      *template.Template
+	assets    map[string]staticAsset
+	mux       *http.ServeMux
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -70,8 +74,13 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("静态资源无效: %w", err)
 	}
 
+	for _, a := range cfg.FrameAncestors {
+		if err := ValidFrameAncestor(a); err != nil {
+			return nil, fmt.Errorf("WHOAMI_FRAME_ANCESTORS: %w", err)
+		}
+	}
 	s := &Server{
-		cfg: cfg, trusted: trusted, dict: NewIPDict(cfg.IPDictPath),
+		cfg: cfg, ancestors: cfg.FrameAncestors, trusted: trusted, dict: NewIPDict(cfg.IPDictPath),
 		detector: detector, tmpl: tmpl, assets: assets, mux: http.NewServeMux(),
 	}
 	s.routes()
