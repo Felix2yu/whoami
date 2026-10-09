@@ -31,6 +31,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/whoami", s.handleReportJSON)
 	s.mux.HandleFunc("POST /report", s.handleReportFragment)
 	s.mux.HandleFunc("GET /static/", s.handleStatic)
+	s.mux.HandleFunc("GET /api/rules", s.handleRules)
 	s.mux.HandleFunc("GET /stats", s.handleStats)
 	s.mux.HandleFunc("GET /api/stats", s.handleStatsAPI)
 }
@@ -44,6 +45,16 @@ func (s *Server) record(kind string, res Result) {
 		slog.Warn("access log write failed", "err", err, "id", res.ID)
 	}
 	s.stats.Observe(rec)
+}
+
+// handleRules 导出当前真正生效的规则表：内置 + 外部覆盖后的结果。
+// 补 token 前先在这里看清结构和字段，不用读源码。
+func (s *Server) handleRules(w http.ResponseWriter, r *http.Request) {
+	s.securityHeaders(w)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"source": s.rulesFrom,
+		"rules":  s.detector.Rules(),
+	})
 }
 
 func (s *Server) statsView() StatsView {

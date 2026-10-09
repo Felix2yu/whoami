@@ -26,6 +26,7 @@ func main() {
 	keepDays := flag.Int("log-keep-days", envIntOr("WHOAMI_LOG_KEEP_DAYS", cfg.LogKeepDays), "启动时清理超过该天数的日志，0 表示不清理")
 	anon := flag.String("anonymize-ip", envOr("WHOAMI_ANONYMIZE_IP", cfg.AnonymizeIP), "日志与统计里的地址脱敏：off|last-octet|full")
 	replayDays := flag.Int("stats-replay-days", envIntOr("WHOAMI_STATS_REPLAY_DAYS", cfg.StatsReplayDays), "启动时回放最近多少天日志重建统计")
+	rules := flag.String("rules", envOr("WHOAMI_RULES", ""), "外部规则 JSON 路径，同 ID 覆盖内置规则")
 	flag.Parse()
 	cfg.Addr = *addr
 	cfg.TrustedProxies = splitList(*proxies)
@@ -35,6 +36,7 @@ func main() {
 	cfg.LogKeepDays = *keepDays
 	cfg.AnonymizeIP = *anon
 	cfg.StatsReplayDays = *replayDays
+	cfg.RulesPath = *rules
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
@@ -51,7 +53,12 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("listening", "addr", srv.Addr())
+		src := srv.RulesSource()
+		logger.Info("listening", "addr", srv.Addr(),
+			"rules", src.Total, "rules_external", src.External, "rules_path", src.Path,
+			"log_dir", cfg.LogDir, "anonymize_ip", cfg.AnonymizeIP,
+			"ip_dict", cfg.IPDictPath, "trusted_proxies", len(srv.TrustedProxies()),
+			"frame_ancestors", cfg.FrameAncestors)
 		errCh <- httpSrv.ListenAndServe()
 	}()
 

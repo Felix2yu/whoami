@@ -41,6 +41,8 @@ type Config struct {
 	StatsReplayBytes int64
 	// AnonymizeIP 是日志与统计里的地址脱敏方式：off|last-octet|full。
 	AnonymizeIP string
+	// RulesPath 是外部规则 JSON 文件路径，同 ID 覆盖内置规则。
+	RulesPath string
 }
 
 func DefaultConfig() Config {
@@ -71,6 +73,7 @@ type Server struct {
 	assets    map[string]staticAsset
 	log       *AccessLog
 	stats     *Stats
+	rulesFrom RulesSource
 	anonSalt  []byte
 	mux       *http.ServeMux
 }
@@ -80,9 +83,19 @@ func NewServer(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("WHOAMI_TRUSTED_PROXIES: %w", err)
 	}
-	detector, err := NewDetector(BuiltinRules())
+	builtin := BuiltinRules()
+	external, err := LoadRules(cfg.RulesPath)
+	if err != nil {
+		return nil, err
+	}
+	merged, replaced := mergeRules(builtin, external)
+	detector, err := NewDetector(merged)
 	if err != nil {
 		return nil, fmt.Errorf("规则表无效: %w", err)
+	}
+	rulesFrom := RulesSource{
+		Builtin: len(builtin), External: len(external), Replaced: replaced,
+		Total: len(merged), Path: cfg.RulesPath,
 	}
 	tmpl, err := loadTemplates()
 	if err != nil {
@@ -124,7 +137,7 @@ func NewServer(cfg Config) (*Server, error) {
 	s := &Server{
 		cfg: cfg, ancestors: cfg.FrameAncestors, trusted: trusted, dict: NewIPDict(cfg.IPDictPath),
 		detector: detector, tmpl: tmpl, assets: assets,
-		log: accessLog, stats: stats, anonSalt: salt[:], mux: http.NewServeMux(),
+		log: accessLog, stats: stats, rulesFrom: rulesFrom, anonSalt: salt[:], mux: http.NewServeMux(),
 	}
 	s.routes()
 	return s, nil
@@ -135,6 +148,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) Addr() string { return s.cfg.Addr }
+
+// TrustedProxies 返回已解析的受信代理网段数量之外的细节，供启动日志与排障使用。
+func (s *Server) TrustedProxies() []*netip.Prefix { return s.trusted }
+
+// RulesSource 说明生效规则表的组成，供启动日志与 /api/rules 使用。
+func (s *Server) RulesSource() RulesSource { return s.rulesFrom }
 
 // Stats 暴露统计聚合，供 /stats、/api/stats 与测试使用。
 func (s *Server) Stats() *Stats { return s.stats }
