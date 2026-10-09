@@ -3,6 +3,7 @@ package whoami
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -93,7 +94,23 @@ func splitKeys(list string) []string {
 
 // allCardKeys 是 ?hide=/?only= 能控制的开关集合。
 func allCardKeys() []string {
-	return []string{"ip", CatOS, CatCPU, CatBrowser, CatGPU, CatPlatform, CatEngine, "extras", "evidence"}
+	return []string{
+		"ip", CatOS, CatCPU, CatBrowser, CatGPU, CatPlatform, CatEngine,
+		"cores", "memory", "screen", "timezone", "model", "platformV", "gpuRaw", "hints",
+		"extras", "evidence",
+	}
+}
+
+// hostOf 取宿主页面的 origin，统计页用它列出「谁在嵌我」。
+func hostOf(referer string) string {
+	if referer == "" {
+		return ""
+	}
+	u, err := url.Parse(referer)
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }
 
 // applyFraming 把嵌入上下文落到视图上。

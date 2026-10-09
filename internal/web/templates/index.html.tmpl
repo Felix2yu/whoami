@@ -1,18 +1,4 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>访客设备信息</title>
-<link rel="stylesheet" href="/static/app.css">
-</head>
-<body class="{{if .Compact}}compact{{end}}">
-
-<header class="head">
-  <h1>访客设备信息</h1>
-  <p class="muted">{{.JSStatus}}</p>
-</header>
-
+{{define "content"}}
 <section class="banner b-{{.Banner.Status}}">
   <div class="row">
     <span class="headline">{{.Banner.Title}}</span>
@@ -23,6 +9,8 @@
   {{if .Banner.Caveat}}<p class="caveat">{{.Banner.Caveat}}</p>{{end}}
   {{range .Banner.Limits}}<p class="limit">{{.}}</p>{{end}}
 </section>
+
+<p class="muted">{{.JSStatus}}</p>
 
 <main>
 {{range .Cards}}
@@ -46,7 +34,7 @@
 {{if .Extras}}
   <details class="more" open><summary>其它信号（{{len .Extras}} 条）</summary>
     <table class="kv"><tbody>
-    {{range .Extras}}<tr><th>{{.Title}}</th><td>{{.Value}}<span class="badge sm b-{{.Status}}">{{.Label}}</span>{{if .Detail}}<br><span class="muted">{{.Detail}}</span>{{end}}</td></tr>{{end}}
+    {{range .Extras}}<tr><th>{{.Title}}</th><td>{{.Value}}{{if .Detail}}<span class="muted"> {{.Detail}}</span>{{end}}</td></tr>{{end}}
     </tbody></table>
   </details>
 {{end}}
@@ -59,11 +47,28 @@
   </details>
 {{end}}
 </main>
+{{end}}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>访客设备信息</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="{{if .Compact}}compact{{end}}">
+
+<header class="head">
+  <h1>访客设备信息</h1>
+</header>
+
+<div id="report">{{template "content" .}}</div>
 
 <footer>
   <p>结论由请求头与浏览器端回报推断，可被 DevTools 或代理伪造，仅供自助排查与终端盘点，不作为准入依据。</p>
   <p class="muted">记录 ID {{.Result.ID}} · {{.Result.Time.Format "2006-01-02 15:04:05"}} UTC</p>
 </footer>
 
+<script src="/static/detect.js" defer></script>
 </body>
 </html>

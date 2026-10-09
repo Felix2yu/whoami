@@ -137,4 +137,9 @@ type Result struct {
 	// Sources 是本次参与判定的来源集合，页面据此提示「仅服务端信号」。
 	Sources []string `json:"sources"`
 	HasJS   bool     `json:"hasJs"`
+	// Browser 是浏览器端回报的展示事实，未收到回报时全部字段为空。
+	Browser BrowserFacts `json:"browser"`
+	// Embedded 说明本次请求是被别的页面用 iframe 嵌入发起的。
+	Embedded bool   `json:"embedded,omitempty"`
+	Host     string `json:"host,omitempty"`
 }

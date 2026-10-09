@@ -90,6 +90,11 @@ func BuildView(res Result) View {
 			v.Extras = append(v.Extras, c)
 		}
 	}
+	for _, c := range browserCards(res.Browser) {
+		if c.Value != "" {
+			v.Extras = append(v.Extras, c)
+		}
+	}
 
 	if res.HasJS {
 		v.JSStatus = "已合并浏览器端回报（Client Hints / WebGL），结论经过跨源交叉验证"
@@ -179,13 +184,61 @@ func cardOf(f Finding, ev []Evidence) Card {
 		Notes:    f.Notes,
 		Evidence: evidenceByKeys(ev, f.EvidenceKeys),
 	}
-	if len(f.Values) > 0 {
-		c.Detail = strings.Join(f.Values, "、")
+	// 只回显短值（架构名、GPU 串），UA 整条已经在原始证据里，摘要行不放。
+	var short []string
+	for _, v := range f.Values {
+		if len(v) <= maxDetailValue {
+			short = append(short, v)
+		}
+	}
+	if len(short) > 0 {
+		c.Detail = strings.Join(short, "、")
 	}
 	if f.Xinchuang {
-		c.Detail = strings.TrimSuffix(c.Detail+" · ", " · ") + fmt.Sprintf("信创判定分 %d/100", f.Score)
+		if c.Detail != "" {
+			c.Detail += " · "
+		}
+		c.Detail += fmt.Sprintf("信创判定分 %d/100", f.Score)
 	}
 	return c
+}
+
+// maxDetailValue 限定摘要行回显的值长度，UA 这类长值一律留给原始证据区。
+const maxDetailValue = 48
+
+// browserCards 是纯展示事实：取到才成行，取不到整行不渲染，不留占位。
+func browserCards(b BrowserFacts) []Card {
+	return []Card{
+		{Key: "cores", Title: "逻辑核心数", Value: intString(b.Cores)},
+		{Key: "memory", Title: "设备内存", Value: floatString(b.Memory) + memoryUnit(b.Memory)},
+		{Key: "screen", Title: "屏幕", Value: b.Screen},
+		{Key: "timezone", Title: "时区", Value: b.Timezone},
+		{Key: "model", Title: "机型", Value: b.Model},
+		{Key: "platformV", Title: "系统版本", Value: b.PlatformVersion},
+		{Key: "gpuRaw", Title: "GPU", Value: b.GPU},
+		{Key: "hints", Title: "Client Hints", Value: b.HintsSource},
+	}
+}
+
+func intString(v int) string {
+	if v <= 0 {
+		return ""
+	}
+	return fmt.Sprint(v)
+}
+
+func floatString(v float64) string {
+	if v <= 0 {
+		return ""
+	}
+	return fmt.Sprint(v)
+}
+
+func memoryUnit(v float64) string {
+	if v <= 0 {
+		return ""
+	}
+	return " GB"
 }
 
 func bestInCategory(fs []Finding, cat string) *Finding {

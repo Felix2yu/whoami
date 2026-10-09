@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"io"
 	"io/fs"
@@ -27,6 +28,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /{$}", s.handleIndex)
 	s.mux.HandleFunc("GET /api/whoami", s.handleAPI)
+	s.mux.HandleFunc("POST /api/whoami", s.handleReportJSON)
+	s.mux.HandleFunc("POST /report", s.handleReportFragment)
 	s.mux.HandleFunc("GET /static/", s.handleStatic)
 }
 
@@ -84,8 +87,85 @@ func contentType(name string) string {
 	}
 }
 
-// detectRequest 是「请求 → 结论」的唯一管线，页面、JSON 端点与日志共用。
+// handleReportJSON 接收浏览器端回报，返回合并后的完整结论。
+func (s *Server) handleReportJSON(w http.ResponseWriter, r *http.Request) {
+	res, err := s.detectWithReport(w, r)
+	if err != nil {
+		slog.Warn("client report rejected", "err", err, "remote", r.RemoteAddr)
+		writeJSON(w, reportStatus(err), map[string]string{"error": err.Error()})
+		return
+	}
+	s.securityHeaders(w)
+	writeJSON(w, http.StatusOK, res)
+}
+
+// handleReportFragment 接收同一份回报，返回渲染好的 HTML 片段。
+// 页面拿片段替换 #report，判定文案就仍然只有服务端一套实现。
+func (s *Server) handleReportFragment(w http.ResponseWriter, r *http.Request) {
+	res, err := s.detectWithReport(w, r)
+	if err != nil {
+		slog.Warn("client report rejected", "err", err, "remote", r.RemoteAddr)
+		http.Error(w, "", reportStatus(err))
+		return
+	}
+	view := BuildView(res).applyFraming(framingOf(r))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	s.securityHeaders(w)
+	if err := s.tmpl.ExecuteTemplate(w, "content", view); err != nil {
+		slog.Error("render fragment failed", "err", err, "id", res.ID)
+	}
+}
+
+// reportStatus 区分「体积超限」和「内容不合法」，两者在 F12 里看的现象不同，
+// 状态码也不该混用。
+func reportStatus(err error) int {
+	var maxBytes *http.MaxBytesError
+	if errors.As(err, &maxBytes) {
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusBadRequest
+}
+
+// detectWithReport 把回报里的客户端信号并入同一套判定管线。
+func (s *Server) detectWithReport(w http.ResponseWriter, r *http.Request) (Result, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxPostBytes)
+	rep, err := DecodeBrowserReport(r.Body)
+	if err != nil {
+		return Result{}, err
+	}
+	ss, ev, ip := s.collect(r)
+	jsSignals, jsEvidence := rep.signals()
+	res := s.detector.Detect(append(ss, jsSignals...), append(ev, jsEvidence...), ip)
+	res.ID = NewID()
+	res.Browser = rep.facts()
+	// 收到回报本身就证明浏览器端跑起来了，即使回报里一个字段都没取到
+	// （禁用 CH、禁用 WebGL 的管控环境就是这么回的）。
+	res.HasJS = true
+	if !containsStr(res.Sources, SourceJS) {
+		res.Sources = append(res.Sources, SourceJS)
+	}
+	s.decorate(&res, r)
+	return res, nil
+}
+
+// detectRequest 是「请求 → 结论」的纯服务端管线，页面、GET JSON 与日志共用。
 func (s *Server) detectRequest(r *http.Request) Result {
+	ss, ev, ip := s.collect(r)
+	res := s.detector.Detect(ss, ev, ip)
+	res.ID = NewID()
+	s.decorate(&res, r)
+	return res
+}
+
+// decorate 记录嵌入上下文，统计页按它区分「直接访问」与「iframe 嵌入」。
+func (s *Server) decorate(res *Result, r *http.Request) {
+	f := framingOf(r)
+	res.Embedded = f.Embedded
+	res.Host = hostOf(f.Referer)
+}
+
+func (s *Server) collect(r *http.Request) (Signals, []Evidence, IPInfo) {
 	ss, ev := Collect(r)
 	ip, ipEv := ResolveClientIP(r, s.trusted)
 	ev = append(ev, ipEv...)
@@ -98,9 +178,7 @@ func (s *Server) detectRequest(r *http.Request) Result {
 		ss = append(ss, Signal{Field: FieldIPLabel, Value: label, Source: SourceIP, EvidenceKey: key})
 	}
 
-	res := s.detector.Detect(ss, ev, ip)
-	res.ID = NewID()
-	return res
+	return ss, ev, ip
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
