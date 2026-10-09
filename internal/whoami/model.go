@@ -93,3 +93,31 @@ func removeSignalField(ss Signals, field string) Signals {
 	}
 	return out
 }
+
+// Finding 是一条规则（或若干条同结论规则合并后）的命中结果。
+type Finding struct {
+	RuleIDs   []string `json:"ruleIds"`
+	Name      string   `json:"name"`
+	Domain    string   `json:"domain"`
+	Category  string   `json:"category"`
+	Domestic  bool     `json:"domestic"`
+	Xinchuang bool     `json:"xinchuang"`
+
+	// Sources 是说出这件事的独立来源，len>1 即跨源一致。
+	Sources      []string `json:"sources"`
+	Values       []string `json:"values,omitempty"`
+	EvidenceKeys []string `json:"evidenceKeys"`
+
+	Confidence int      `json:"confidence"` // 证据强度：跨源一致会抬升，冲突会压低
+	Score      int      `json:"score"`      // 信创判定分：被 Ceiling 压制后的结果
+	Notes      []string `json:"notes,omitempty"`
+	Verified   bool     `json:"verified"`
+}
+
+// Verdict 是对「这台机器是不是信创」的三态回答。
+type Verdict struct {
+	Status  string   `json:"status"` // confirmed|suspect|unknown
+	Score   int      `json:"score"`
+	Reasons []string `json:"reasons"`
+	Limits  []string `json:"limits"`
+}

@@ -1,0 +1,22 @@
+# 信创/国产 UA 语料：caseID <TAB> 期望命中 <TAB> 期望不命中 <TAB> UA
+# 四列制表符分隔，无内容用 - 占位；# 起注释。
+# token 来源：UOS / Kylinbrowser / Qaxbrowser 见 README 引用的公开语料，
+# loongarch64 / sw_64 / mips64 是各架构 Linux 的 uname 上报值。
+loongarch-new-world	cpu-loongarch64,plat-linux,browser-chrome	cpu-x8664,os-uos,os-kylin,browser-kylin	Mozilla/5.0 (X11; Linux loongarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36
+uos-word	os-uos,plat-linux,cpu-x8664,browser-chrome	cpu-aarch64,os-kylin,browser-uos	Mozilla/5.0 (X11; UOS; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+uos-glued-browser	browser-uos,plat-linux,cpu-x8664,browser-chrome	os-kylin,browser-360	Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 UOSBrowser/2.1.3054.203 Safari/537.36
+uos-uniontech-dashed	os-uniontech,os-uos,browser-uos,cpu-aarch64,plat-linux	cpu-x8664,os-kylin	Mozilla/5.0 (X11; Linux aarch64; uniontech) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 UOS-Browser/2.1 Safari/537.36
+kylin-arm-browser	os-kylin,browser-kylin,cpu-aarch64,plat-linux,browser-chrome	cpu-x8664,os-deepin	Mozilla/5.0 (X11; Linux aarch64; Kylin) AppleWebKit/537.36 (KHTML, like Gecko) Kylinbrowser/1.2.1 Chrome/78.0.3904.108 Safari/537.36
+kylin-sw64	cpu-sw64,os-kylinos,plat-linux	os-kylin,browser-kylin,browser-uos	Mozilla/5.0 (X11; Linux sw_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 kylinos/10
+loongson-mips-deepin	cpu-mips64,os-deepin,plat-linux	cpu-x8664,os-uos,browser-kylin	Mozilla/5.0 (X11; Linux mips64; deepin) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36
+qax-on-windows	browser-qax,plat-windows,cpu-x8664,browser-chrome	os-uos,os-kylin,browser-kylin	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 QaxBrowser/1.0.0.20 Safari/537.36
+browser-360-se	browser-360,plat-windows,cpu-x8664	os-kylin,cpu-aarch64,browser-qax	Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36 360SE
+browser-sogou-metasr	browser-sogou,plat-windows,cpu-x8664	browser-360,browser-qq	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36 SE 2.X MetaSr 1.0
+browser-qq-huawei	browser-qq,plat-android	cpu-loongarch64,cpu-sw64	Mozilla/5.0 (Linux; Android 12; JER-AN10 Build/HUAWEIJER-AN10) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/99.0.4844.88 Mobile Safari/537.36 MQQBrowser/13.8
+browser-uc-android	browser-uc,plat-android	plat-ios,plat-harmonyos	Mozilla/5.0 (Linux; U; Android 12; zh-CN; NAM-AL00 Build/HUAWEINAM-AL00) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/100.0.4896.58 UCBrowser/13.4.3.1120 Mobile Safari/537.36
+harmonyos-phone	plat-harmonyos	cpu-loongarch64,os-uos	Mozilla/5.0 (Phone; HarmonyOS 3.1; ALN-AL10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36
+android-no-arch	plat-android,browser-chrome	cpu-aarch64,cpu-loongarch64,os-kylin	Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36
+macos-safari-intel-trap	plat-macos,browser-safari	cpu-x8664,os-deepin	Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15
+edge-carries-chrome-token	browser-edge,browser-chrome,plat-windows	-	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0
+frozen-enterprise-ua	plat-windows,cpu-x8664,browser-chrome	os-uos,os-kylin,os-deepin,browser-kylin,browser-uos,browser-qax,cpu-aarch64,cpu-loongarch64,cpu-sw64	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+curl-headless	-	plat-windows,plat-ios,cpu-x8664,os-uos	curl/8.4.0
