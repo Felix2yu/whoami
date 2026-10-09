@@ -45,7 +45,12 @@ func newCounters() *Counters {
 
 // CountersView 是渲染用的排序结果。
 type CountersView struct {
-	Status, Arch, OS, Browser, Label, Host []Row
+	Status  []Row `json:"status"`
+	Arch    []Row `json:"arch"`
+	OS      []Row `json:"os"`
+	Browser []Row `json:"browser"`
+	Label   []Row `json:"label"`
+	Host    []Row `json:"host"`
 }
 
 // StatsView 是 /api/stats 与 /stats 页面的数据源。
