@@ -1,0 +1,18 @@
+# 判定语料：caseID <TAB> 期望信创状态 <TAB> 期望最高分结论 <TAB> UA
+# 状态取 confirmed|suspect|unknown；unknown 的行第三个字段用 -。
+loongarch-chrome	confirmed	龙芯 LoongArch	Mozilla/5.0 (X11; Linux loongarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36
+shenwei-kylin	confirmed	申威 SW-64	Mozilla/5.0 (X11; Linux sw_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 kylinos/10
+loongson-mips-deepin	confirmed	龙芯 MIPS（旧世界）	Mozilla/5.0 (X11; Linux mips64; deepin) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36
+kylin-phytium	confirmed	银河麒麟 / 中标麒麟	Mozilla/5.0 (X11; Linux aarch64; Kylin) AppleWebKit/537.36 (KHTML, like Gecko) Kylinbrowser/1.2.1 Chrome/78.0.3904.108 Safari/537.36
+uos-word	confirmed	统信 UOS	Mozilla/5.0 (X11; UOS; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+uos-glued-browser	confirmed	统信浏览器	Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 UOSBrowser/2.1.3054.203 Safari/537.36
+kylin-hygon-x86	confirmed	银河麒麟 / 中标麒麟	Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36 kylinos
+qax-on-windows	suspect	奇安信浏览器	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 QaxBrowser/1.0.0.20 Safari/537.36
+deepin-x86	suspect	deepin 深度	Mozilla/5.0 (X11; Linux x86_64; deepin) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+openEuler-x86	suspect	openEuler 欧拉	Mozilla/5.0 (X11; Linux x86_64; openEuler) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+browser-360	unknown	-	Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36 360SE
+frozen-enterprise	unknown	-	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+macos-safari	unknown	-	Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15
+android-mobile	unknown	-	Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36
+riscv-board	unknown	-	Mozilla/5.0 (X11; Linux riscv64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+headless-curl	unknown	-	curl/8.4.0
