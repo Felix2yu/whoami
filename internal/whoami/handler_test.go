@@ -202,6 +202,25 @@ func TestBuildViewBannerAndStatus(t *testing.T) {
 	}
 }
 
+func TestCardDetailKeepsShortValuesOnly(t *testing.T) {
+	long := strings.Repeat("m", maxDetailValue+1)
+	fs := []Finding{{
+		RuleIDs: []string{"cpu-loongarch64"}, Name: "龙芯 LoongArch", Domain: "CPU 架构", Category: CatCPU,
+		Xinchuang: true, Sources: []string{SourceHeader}, Values: []string{"loongarch64", long},
+		Confidence: 100, Ceiling: 100, Score: 100,
+	}}
+	cards := findingCards(fs, nil)
+	if len(cards) != 1 {
+		t.Fatalf("cards = %+v", cards)
+	}
+	if strings.Contains(cards[0].Detail, long) {
+		t.Errorf("摘要行回显了超长值：%q", cards[0].Detail)
+	}
+	if !strings.Contains(cards[0].Detail, "loongarch64") || !strings.Contains(cards[0].Detail, " · 信创判定分 100/100") {
+		t.Errorf("detail = %q，应有短值与分隔符", cards[0].Detail)
+	}
+}
+
 func TestBuildViewIPCardCombinesLabelAndNotes(t *testing.T) {
 	res := Result{Client: IPInfo{
 		IP: "2.46.0.7", Family: "ipv4", Source: "x-forwarded-for", Label: "三分局出口",
