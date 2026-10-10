@@ -37,6 +37,31 @@ go build -o bin/whoami ./cmd/whoami
 `MaxHeaderBytes 64KiB`，浏览器端回报 `32KiB`（实际 payload 2–4KB），单条证据展示截断 512B，
 JSON 输出上限 1MiB。
 
+## 容器
+
+```bash
+./build.sh                      # 产出 bin/whoami（装配式镜像的二进制来源）
+docker build -t whoami .        # 本机没有 docker 时这一步交给 CI
+docker run --rm -p 8080:8080 -v whoami-data:/data whoami
+```
+
+镜像是装配式的：`alpine:3.24` + 非 root 用户 + `COPY bin/whoami`，没有 Go/Node 构建阶段，
+因为页面资源已经通过 `go:embed` 进了二进制。
+
+容器里有两个和裸机不同的默认值，都是刻意的：
+
+- `WHOAMI_ADDR=:8080`：进程内默认监听 `127.0.0.1:8080`（本机跑不暴露到局域网），
+  容器里必须放开到所有网卡。用环境变量而不是写死 `ENTRYPOINT` 参数，
+  是因为 `cmd/whoami` 的 flag 默认值读 env，你显式传 `-addr` 仍然优先。
+- `WHOAMI_LOG_DIR=/data/logs` + `VOLUME`：日志和 IP 字典都挂 `/data` 就能跨重启保留，
+  统计会在启动时回放这些日志重建。
+
+监听地址、日志目录等全部走同一套 flag/env（见下表），compose 里改 env 即可，不用覆盖命令。
+
+本地实测：`CGO_ENABLED=0 GOOS=linux go build` 产物 `file` 判定为 `ELF ... statically linked`、
+无 `PT_INTERP`，所以 CI 的 `cgo: off` 分支是真静态，装进 musl 不会 ENOENT。
+`build.sh` 里带同一条校验（本机没 `readelf` 时跳过并说明）。
+
 ## 端点
 
 | 路径 | 说明 |
@@ -173,6 +198,17 @@ curl -s localhost:8080/api/rules | jq '.rules' > rules.json   # 先拿现成的�
   看不出原地址但 `独立 IP` 计数仍然正确。
 - 默认不外呼任何第三方归属接口。要接你现有的 IP 服务，实现
   `internal/whoami/ipgeo.go` 里的 `IpInfoProvider` 接口即可。
+
+## CI
+
+`.github/workflows/ci.yml` 转调组织统一的复用流水线（`Felix2yu/.github` 的 `@v1`）：
+
+- `test` → `reusable-test.yml`，`test-flags: -race -covermode=atomic`（判定链、日志与统计都要求并发安全）
+- `image` → `reusable-image.yml`，`cgo: off`、`main-package: ./cmd/whoami`，推 `ghcr.io/felix2yu/whoami`
+- `release` → `reusable-release.yml`，仅在 `release: published` 时跑多平台产物
+
+没有 `web-dir` / `frontend-stage-command`：仓库里没有需要 Node 构建的前端，
+JS/CSS 是直接 `go:embed` 的源文件。工具链版本由 `go.mod` 声明，workflow 里不写死。
 
 ## 测试
 

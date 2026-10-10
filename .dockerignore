@@ -1,0 +1,8 @@
+.git
+.github
+.dockerignore
+Dockerfile
+data/
+coverage.out
+ip.csv
+# 注意：不要在这里排除 bin/ —— Dockerfile 是装配式镜像，靠 COPY bin/whoami 拿二进制。
