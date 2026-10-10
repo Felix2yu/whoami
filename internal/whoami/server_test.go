@@ -3,6 +3,8 @@ package whoami
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -93,5 +95,34 @@ func TestHTTPServerCarriesConfig(t *testing.T) {
 		hs.ReadTimeout != cfg.ReadTimeout || hs.WriteTimeout != cfg.WriteTimeout ||
 		hs.IdleTimeout != cfg.IdleTimeout || hs.MaxHeaderBytes != cfg.MaxHeaderBytes {
 		t.Fatalf("http.Server does not mirror Config: %+v", hs)
+	}
+}
+
+// 回归：-anonymize-ip full 的盐必须跨重启复用。
+// 日志里存的是哈希结果，换盐后同一访客会得到新标识，「独立 IP」计数会翻倍。
+func TestAnonSaltPersistsAcrossRestarts(t *testing.T) {
+	dir := t.TempDir()
+	ip := mustAddr(t, "203.0.113.9")
+
+	first := newLoggingTestServer(t, dir)
+	second := newLoggingTestServer(t, dir)
+	if len(first.anonSalt) < 16 {
+		t.Fatalf("盐长度 %d 过短", len(first.anonSalt))
+	}
+	if AnonymizeIP(ip, "full", first.anonSalt) != AnonymizeIP(ip, "full", second.anonSalt) {
+		t.Fatal("同一日志目录重启后盐应一致，full 模式的独立 IP 计数才能跨重启正确")
+	}
+
+	info, err := os.Stat(filepath.Join(dir, ".anon-salt"))
+	if err != nil {
+		t.Fatalf("盐文件应落在日志目录: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("盐文件权限 = %o，应为 600", perm)
+	}
+
+	// 未开启落盘时没有跨重启的真源，每次启动给随机盐即可。
+	if off := newTestServer(t); len(off.anonSalt) == 0 {
+		t.Error("关闭落盘时也应生成盐")
 	}
 }

@@ -25,6 +25,7 @@ func main() {
 	logDir := flag.String("log-dir", envOr("WHOAMI_LOG_DIR", cfg.LogDir), "访问日志目录，留空表示不落盘")
 	keepDays := flag.Int("log-keep-days", envIntOr("WHOAMI_LOG_KEEP_DAYS", cfg.LogKeepDays), "启动时清理超过该天数的日志，0 表示不清理")
 	anon := flag.String("anonymize-ip", envOr("WHOAMI_ANONYMIZE_IP", cfg.AnonymizeIP), "日志与统计里的地址脱敏：off|last-octet|full")
+	statsToken := flag.String("stats-token", envOr("WHOAMI_STATS_TOKEN", ""), "/stats 与 /api/stats 的访问口令，留空表示不校验")
 	replayDays := flag.Int("stats-replay-days", envIntOr("WHOAMI_STATS_REPLAY_DAYS", cfg.StatsReplayDays), "启动时回放最近多少天日志重建统计")
 	rules := flag.String("rules", envOr("WHOAMI_RULES", ""), "外部规则 JSON 路径，同 ID 覆盖内置规则")
 	geoEndpoint := flag.String("ip-geo-endpoint", envOr("WHOAMI_IP_GEO_ENDPOINT", ""), "IP 归属查询接口，{ip} 会被替换成访客地址；留空表示不外呼")
@@ -37,6 +38,7 @@ func main() {
 	cfg.LogDir = *logDir
 	cfg.LogKeepDays = *keepDays
 	cfg.AnonymizeIP = *anon
+	cfg.StatsToken = *statsToken
 	cfg.StatsReplayDays = *replayDays
 	cfg.RulesPath = *rules
 	cfg.GeoEndpoint = *geoEndpoint

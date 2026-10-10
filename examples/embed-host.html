@@ -46,7 +46,23 @@
           title="强制完整版式"></iframe>
 </div>
 
+<p>宿主监听 <code>whoami:height</code> 消息，按 <code>e.source</code> 匹配 iframe 自动调高度：
+页面内容变化（JS 回报到达、窗口 resize）都会重新上报。</p>
+
 <p>另开一个终端验证响应头里只有 <code>frame-ancestors</code>，没有 X-Frame-Options 与 COEP/CORP：</p>
 <pre><code>curl -si http://127.0.0.1:8080/ | grep -iE 'x-frame-options|cross-origin|content-security-policy'</code></pre>
+<script>
+  // iframe 内容高度上报：按 e.source 匹配来源，避免多个 iframe 互相覆盖。
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'whoami:height') return;
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === e.source) {
+        frames[i].style.height = e.data.height + 'px';
+        return;
+      }
+    }
+  });
+</script>
 </body>
 </html>

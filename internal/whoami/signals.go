@@ -167,10 +167,12 @@ func ArchFromUA(ua string) string {
 	return ""
 }
 
-// platformPatterns 顺序敏感：Android 含 "linux"，iPhone 含 "mac os x"。
+// platformPatterns 顺序敏感：Android 含 "linux"，iPhone 含 "mac os x"；
+// BSD 的 Firefox UA 也带 "X11"，所以三个 BSD 必须排在 x11 之前。
 var platformPatterns = []struct{ token, platform string }{
 	{"android", "android"},
 	{"harmonyos", "harmonyos"},
+	{"openharmony", "harmonyos"},
 	{"iphone", "ios"},
 	{"ipad", "ios"},
 	{"cros", "chromeos"},
@@ -178,9 +180,11 @@ var platformPatterns = []struct{ token, platform string }{
 	{"mac os x", "macos"},
 	{"windows nt", "windows"},
 	{"wow64", "windows"},
+	{"freebsd", "freebsd"},
+	{"openbsd", "openbsd"},
+	{"netbsd", "netbsd"},
 	{"x11", "linux"},
 	{"linux", "linux"},
-	{"freebsd", "freebsd"},
 }
 
 func PlatformFromUA(ua string) string {

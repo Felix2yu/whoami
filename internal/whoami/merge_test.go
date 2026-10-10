@@ -47,12 +47,16 @@ func TestReportEscalatesByCrossSourceAgreement(t *testing.T) {
 		t.Fatalf("架构结论应跨源，实际 %+v", arch)
 	}
 	for _, l := range res.Verdict.Limits {
-		if strings.Contains(l, "没有收到浏览器端回报") {
+		if strings.Contains(l, "没有可用于交叉验证的信号") {
 			t.Error("已收到回报却仍提示未交叉验证")
 		}
 	}
 	if !containsStr(res.Sources, SourceJS) {
 		t.Errorf("sources = %v", res.Sources)
+	}
+	// 架构结论 header+js 双源：JSStatus 应点名交叉印证的结论数，而非笼统宣称。
+	if js := BuildView(res).JSStatus; !strings.Contains(js, "项结论经浏览器端与服务端交叉印证") {
+		t.Errorf("jsStatus = %q", js)
 	}
 }
 
@@ -250,6 +254,13 @@ func TestEmptyReportIsStillUseful(t *testing.T) {
 	joined := strings.Join(res.Verdict.Limits, "|")
 	if !strings.Contains(joined, "没有 GPU 信号") {
 		t.Errorf("空回报时仍应说明 GPU 缺位：%s", joined)
+	}
+	// 空回报时文案不得自相矛盾、也不得宣称交叉印证。
+	if strings.Contains(joined, "没有收到浏览器端回报") {
+		t.Errorf("已收到空回报却说没收到：%s", joined)
+	}
+	if js := BuildView(res).JSStatus; !strings.Contains(js, "已收到浏览器端回报") || strings.Contains(js, "交叉印证") {
+		t.Errorf("空回报的 JSStatus = %q", js)
 	}
 	if res.Browser != (BrowserFacts{}) {
 		t.Errorf("空回报不该有展示事实：%+v", res.Browser)

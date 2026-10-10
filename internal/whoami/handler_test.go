@@ -58,10 +58,11 @@ func TestUnknownVerdictExplainsItself(t *testing.T) {
 	if !strings.Contains(body, "无法判定") {
 		t.Error("通用 UA 应给出「无法判定」")
 	}
-	if !strings.Contains(body, "不等于不是信创") {
+	if !strings.Contains(body, "不等于不是信创") && !strings.Contains(body, "不代表机器不是信创") {
 		t.Error("无法判定时必须解释清楚边界")
 	}
-	if strings.Contains(body, "非信创") && !strings.Contains(body, "不等于不是信创") {
+	if strings.Contains(body, "非信创") &&
+		!strings.Contains(body, "不等于不是信创") && !strings.Contains(body, "不代表机器不是信创") {
 		t.Error("不得出现否定断言")
 	}
 	if !strings.Contains(body, "仅服务端信号") {
@@ -130,7 +131,7 @@ func TestAPIWhoamiJSONShape(t *testing.T) {
 	}
 }
 
-func TestStaticAssetsAreCachedAndImmutable(t *testing.T) {
+func TestStaticAssetsAreRevalidatedWithETag(t *testing.T) {
 	s := newTestServer(t)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/app.css", nil))
@@ -141,7 +142,8 @@ func TestStaticAssetsAreCachedAndImmutable(t *testing.T) {
 		t.Errorf("content-type = %q", ct)
 	}
 	etag := rec.Header().Get("ETag")
-	if etag == "" || rec.Header().Get("Cache-Control") != "public, max-age=3600" {
+	// no-cache：JS 修正必须立刻到客户端，靠 ETag 走 304 而不是强缓存一小时。
+	if etag == "" || rec.Header().Get("Cache-Control") != "no-cache" {
 		t.Errorf("etag=%q cache=%q", etag, rec.Header().Get("Cache-Control"))
 	}
 
@@ -178,9 +180,6 @@ func TestBuildViewBannerAndStatus(t *testing.T) {
 	if v.Banner.Status != "confirmed" || v.Banner.Title != "信创终端" {
 		t.Errorf("banner = %+v", v.Banner)
 	}
-	if v.Banner.Caveat != "" {
-		t.Error("确认结论不需要 caveat")
-	}
 	if !v.HasContent() {
 		t.Fatal("视图没有内容")
 	}
@@ -196,8 +195,11 @@ func TestBuildViewBannerAndStatus(t *testing.T) {
 		t.Errorf("jsStatus = %q", v.JSStatus)
 	}
 
+	// 只置 HasJS、没有 js 信号（等价于空回报）：只能说「收到了但没法交叉验证」，
+	// 不得宣称已交叉印证。
 	res.HasJS = true
-	if v2 := BuildView(res); !strings.Contains(v2.JSStatus, "跨源交叉验证") {
+	v2 := BuildView(res)
+	if !strings.Contains(v2.JSStatus, "已收到浏览器端回报") || strings.Contains(v2.JSStatus, "交叉印证") {
 		t.Errorf("jsStatus = %q", v2.JSStatus)
 	}
 }
@@ -248,5 +250,115 @@ func TestDetectRequestIsIndependentPerRequest(t *testing.T) {
 	}
 	if a.Verdict.Status != b.Verdict.Status {
 		t.Fatalf("同输入应同结论：%s vs %s", a.Verdict.Status, b.Verdict.Status)
+	}
+}
+
+func TestRecordLookupByID(t *testing.T) {
+	s := newTestServer(t)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/whoami", nil))
+	var res Result
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+
+	got := httptest.NewRecorder()
+	s.ServeHTTP(got, httptest.NewRequest(http.MethodGet, "/api/record/"+res.ID, nil))
+	if got.Code != http.StatusOK {
+		t.Fatalf("反查 status = %d body=%s", got.Code, got.Body.String())
+	}
+	var back Result
+	if err := json.Unmarshal(got.Body.Bytes(), &back); err != nil || back.ID != res.ID {
+		t.Errorf("反查结果 = %+v err=%v", back.ID, err)
+	}
+
+	miss := httptest.NewRecorder()
+	s.ServeHTTP(miss, httptest.NewRequest(http.MethodGet, "/api/record/0000000000000000", nil))
+	if miss.Code != http.StatusNotFound {
+		t.Errorf("未知 ID status = %d, want 404", miss.Code)
+	}
+}
+
+func TestStatsRequiresTokenAndRateLimits(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LogDir = ""
+	cfg.StatsToken = "s3cret"
+	s, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	defer s.Close()
+
+	// 配了口令就必须出示：查询参数与请求头两种方式都认。
+	for _, path := range []string{"/stats", "/api/stats"} {
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s 无 token status = %d, want 403", path, rec.Code)
+		}
+	}
+	ok := httptest.NewRecorder()
+	s.ServeHTTP(ok, httptest.NewRequest(http.MethodGet, "/api/stats?token=s3cret", nil))
+	if ok.Code != http.StatusOK {
+		t.Errorf("query token status = %d", ok.Code)
+	}
+	hdr := httptest.NewRequest(http.MethodGet, "/api/stats", nil)
+	hdr.Header.Set("X-Stats-Token", "s3cret")
+	ok2 := httptest.NewRecorder()
+	s.ServeHTTP(ok2, hdr)
+	if ok2.Code != http.StatusOK {
+		t.Errorf("header token status = %d", ok2.Code)
+	}
+
+	// 同一地址连打超出窗口配额：必须出现 429，而不是一直放行。
+	var limited bool
+	for i := 0; i < statsRateLimit+10; i++ {
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/stats?token=s3cret", nil))
+		if rec.Code == http.StatusTooManyRequests {
+			limited = true
+			if rec.Header().Get("Retry-After") == "" {
+				t.Error("429 应带 Retry-After")
+			}
+			break
+		}
+	}
+	if !limited {
+		t.Errorf("连续 %d 次请求未触发限流", statsRateLimit+10)
+	}
+}
+
+// UA 必须两端一致：请求头 UA 和 navigator.userAgent 正常情况下必然相同，
+// 不一致说明有代理改写或伪造，结论页必须提示人工核对。
+func TestReportFlagsUAMismatch(t *testing.T) {
+	s := newTestServer(t)
+	const headerUA = "Mozilla/5.0 (X11; UOS; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0"
+
+	post := func(body string) Result {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodPost, "/api/whoami", strings.NewReader(body))
+		r.Header.Set("User-Agent", headerUA)
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, r)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("report status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var res Result
+		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	mismatch := post(`{"userAgent":"Evil-UA/1.0"}`)
+	if !strings.Contains(strings.Join(mismatch.Verdict.Limits, "|"), "UA 与请求头不一致") {
+		t.Errorf("UA 不一致应写进 Limits：%+v", mismatch.Verdict.Limits)
+	}
+
+	match := post(`{"userAgent":"` + headerUA + `"}`)
+	for _, l := range match.Verdict.Limits {
+		if strings.Contains(l, "UA 与请求头不一致") {
+			t.Errorf("UA 一致时不该提示：%s", l)
+		}
 	}
 }

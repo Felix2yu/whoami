@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"whoami/internal/web"
 )
@@ -34,6 +36,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/rules", s.handleRules)
 	s.mux.HandleFunc("GET /stats", s.handleStats)
 	s.mux.HandleFunc("GET /api/stats", s.handleStatsAPI)
+	s.mux.HandleFunc("GET /api/record/{id}", s.handleRecord)
 }
 
 // record 落一条访问日志并计入统计。日志里的地址按配置脱敏，
@@ -45,6 +48,41 @@ func (s *Server) record(kind string, res Result) {
 		slog.Warn("access log write failed", "err", err, "id", res.ID)
 	}
 	s.stats.Observe(rec)
+	s.remember(res)
+}
+
+// maxRecentRecords 限制按 ID 反查的缓存条数：结果约 3–8KB，
+// 512 条约几 MB 封顶，够排障回溯又不会随流量增长。
+const maxRecentRecords = 512
+
+// remember 保存最近的结果供 /api/record/{id} 反查，FIFO 淘汰最旧的。
+func (s *Server) remember(res Result) {
+	s.recentMu.Lock()
+	defer s.recentMu.Unlock()
+	if s.recent == nil {
+		s.recent = make(map[string]Result, 64)
+	}
+	if _, dup := s.recent[res.ID]; !dup {
+		s.recentKeys = append(s.recentKeys, res.ID)
+	}
+	s.recent[res.ID] = res
+	for len(s.recentKeys) > maxRecentRecords {
+		delete(s.recent, s.recentKeys[0])
+		s.recentKeys = s.recentKeys[1:]
+	}
+}
+
+// handleRecord 按页面页脚展示的记录 ID 反查完整结果，供工单里回溯一次检测。
+func (s *Server) handleRecord(w http.ResponseWriter, r *http.Request) {
+	s.securityHeaders(w)
+	s.recentMu.Lock()
+	res, ok := s.recent[r.PathValue("id")]
+	s.recentMu.Unlock()
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "记录不存在或已超出缓存范围"})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // handleRules 导出当前真正生效的规则表：内置 + 外部覆盖后的结果。
@@ -62,6 +100,9 @@ func (s *Server) statsView() StatsView {
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeStats(w, r) {
+		return
+	}
 	s.securityHeaders(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -71,8 +112,75 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStatsAPI(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeStats(w, r) {
+		return
+	}
 	s.securityHeaders(w)
 	writeJSON(w, http.StatusOK, s.statsView())
+}
+
+// 统计接口的限流参数：每 IP 每分钟 60 次，够人正常刷新页面，
+// 又能把脚本扫目录或刷爆统计的代价抬高。
+const (
+	statsRateLimit  = 60
+	statsRateWindow = time.Minute
+)
+
+// authorizeStats 守住 /stats 与 /api/stats：配了 token 必须出示
+// （?token= 或 X-Stats-Token 头），并按客户端 IP 限流。
+// 未配 token 时限流仍然生效，避免默认部署下统计页被无差别抓取。
+func (s *Server) authorizeStats(w http.ResponseWriter, r *http.Request) bool {
+	if s.cfg.StatsToken != "" {
+		got := r.URL.Query().Get("token")
+		if got == "" {
+			got = r.Header.Get("X-Stats-Token")
+		}
+		if got != s.cfg.StatsToken {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "stats token 无效"})
+			return false
+		}
+	}
+	ip, _ := ResolveClientIP(r, s.trusted)
+	if !s.statsRL.allow(ip.IP, time.Now()) {
+		w.Header().Set("Retry-After", "60")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "请求过于频繁"})
+		return false
+	}
+	return true
+}
+
+// rateLimiter 是按 key 的固定窗口限流器，只服务统计接口这一个低频场景。
+type rateLimiter struct {
+	mu      sync.Mutex
+	limit   int
+	window  time.Duration
+	entries map[string]*rlEntry
+}
+
+type rlEntry struct {
+	count int
+	reset time.Time
+}
+
+func newRateLimiter(limit int, window time.Duration) *rateLimiter {
+	return &rateLimiter{limit: limit, window: window, entries: map[string]*rlEntry{}}
+}
+
+func (l *rateLimiter) allow(key string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	// key 来自客户端地址，条目数必须封顶：超限时整体重开窗口，
+	// 宁可放行一个窗口，也不让伪造地址把内存吃光。
+	if len(l.entries) > 4096 {
+		l.entries = map[string]*rlEntry{}
+	}
+	e := l.entries[key]
+	if e == nil || now.After(e.reset) {
+		l.entries[key] = &rlEntry{count: 1, reset: now.Add(l.window)}
+		return true
+	}
+	e.count++
+	return e.count <= l.limit
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +220,10 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	s.securityHeaders(w)
 	w.Header().Set("Content-Type", contentType(name))
 	w.Header().Set("ETag", asset.etag)
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	// no-cache 而不是 max-age：detect.js 的修正必须立刻到客户端，
+	// 否则旧 JS 会在部署后继续跑最长一小时（P0 那类开关丢失就会复现）。
+	// 配合 ETag 每次只多一轮 304 协商，没有实际体积代价。
+	w.Header().Set("Cache-Control", "no-cache")
 	if r.Header.Get("If-None-Match") == asset.etag {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -190,6 +301,12 @@ func (s *Server) detectWithReport(w http.ResponseWriter, r *http.Request) (Resul
 	res.HasJS = true
 	if !containsStr(res.Sources, SourceJS) {
 		res.Sources = append(res.Sources, SourceJS)
+	}
+	// navigator.userAgent 与本次请求头对照：正常情况必然一致，
+	// 不一致说明中间有代理改写 UA、或其中一侧被伪造，必须写在结论旁。
+	if hua, jsa := strings.TrimSpace(r.Header.Get("User-Agent")), strings.TrimSpace(rep.UserAgent); hua != "" && jsa != "" && hua != jsa {
+		res.Verdict.Limits = append(res.Verdict.Limits,
+			"浏览器端 UA 与请求头不一致：可能被代理改写或伪造，UA 相关结论需人工核对")
 	}
 	s.attachGeo(r, &res)
 	s.decorate(&res, r)

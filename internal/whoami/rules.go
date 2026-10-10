@@ -83,8 +83,10 @@ func BuiltinRules() []Rule {
 	// --- 系统家族（FieldPlatform）：只回答「哪一类系统」，不参与信创判定 ---
 	out = append(out,
 		r("plat-linux", FieldPlatform, e("linux"), "Linux", "系统家族", CatPlatform, 90, 0, "Linux 家族，具体发行版看下面的信号。"),
-		r("plat-windows", FieldPlatform, e("windows"), "Windows", "系统家族", CatPlatform, 90, 0, ""),
-		r("plat-macos", FieldPlatform, e("macos"), "macOS", "系统家族", CatPlatform, 90, 0, "Safari 的 UA 精简，Apple 芯片与 Intel 无法从 UA 区分。"),
+		r("plat-windows", FieldPlatform, e("windows"), "Windows", "系统家族", CatPlatform, 90, 0, "").
+			suppress("cpu-aarch64"),
+		r("plat-macos", FieldPlatform, e("macos"), "macOS", "系统家族", CatPlatform, 90, 0, "Safari 的 UA 精简，Apple 芯片与 Intel 无法从 UA 区分。").
+			suppress("cpu-aarch64"),
 		r("plat-android", FieldPlatform, e("android"), "Android", "系统家族", CatPlatform, 90, 0, "安卓设备上报的 ARM 与信创无关。").
 			suppress("cpu-aarch64", "cpu-riscv64"),
 		r("plat-ios", FieldPlatform, e("ios"), "iOS/iPadOS", "系统家族", CatPlatform, 90, 0, "").
@@ -93,6 +95,13 @@ func BuiltinRules() []Rule {
 			suppress("cpu-aarch64"),
 		r("plat-harmonyos", FieldPlatform, e("harmonyos"), "HarmonyOS", "系统家族", CatPlatform, 90, 0, "国产移动系统，不属于信创 PC/服务器范畴。").
 			cn().suppress("cpu-aarch64", "cpu-riscv64"),
+		// BSD 与信创无关：其上的 ARM/RISC-V 一样不参与信创判定。
+		r("plat-freebsd", FieldPlatform, e("freebsd"), "FreeBSD", "系统家族", CatPlatform, 90, 0, "").
+			suppress("cpu-aarch64", "cpu-riscv64"),
+		r("plat-openbsd", FieldPlatform, e("openbsd"), "OpenBSD", "系统家族", CatPlatform, 90, 0, "").
+			suppress("cpu-aarch64", "cpu-riscv64"),
+		r("plat-netbsd", FieldPlatform, e("netbsd"), "NetBSD", "系统家族", CatPlatform, 90, 0, "").
+			suppress("cpu-aarch64", "cpu-riscv64"),
 	)
 
 	// --- CPU 架构（FieldArch）：最硬的信创信号 ---
@@ -108,6 +117,8 @@ func BuiltinRules() []Rule {
 		r("cpu-riscv64", FieldArch, e("riscv64", "riscv"), "RISC-V", "CPU 架构", CatCPU, 45, 40,
 			"国产 RISC-V 生态仍在早期，暂不参与信创判定。"),
 		r("cpu-arm32", FieldArch, e("arm"), "ARM 32 位", "CPU 架构", CatCPU, 20, 20, "嵌入式特征，与信创无关。"),
+		r("cpu-ppc64", FieldArch, e("ppc64", "powerpc"), "PowerPC 64", "CPU 架构", CatCPU, 15, 15,
+			"IBM Power 架构，国际生态，与信创无关。"),
 		r("cpu-x8664", FieldArch, e("x86_64", "x86_32"), "x86", "CPU 架构", CatCPU, 10, 10,
 			"海光、兆芯是国产 x86，但任何 HTTP 信号都无法把它们与 Intel/AMD 区分开——这是本检测方法的天花板，不是访客机器的证据。"),
 	)
@@ -118,8 +129,10 @@ func BuiltinRules() []Rule {
 			"UA 中的 UOS 字段来自统信定制 Chromium 构建。").xc(),
 		r("os-uniontech", FieldUA, c("uniontech"), "统信 UOS", "发行版", CatOS, 95, 100,
 			"uniontech 是统信软件的域名标识。").xc(),
-		r("os-kylin", FieldUA, w("kylin"), "银河麒麟 / 中标麒麟", "发行版", CatOS, 95, 100,
-			"麒麟系发行版的 UA 标识。").xc(),
+		// "Ubuntu Kylin"/"Open Kylin" 里的 kylin 指优麒麟/开放麒麟，不是银河麒麟，
+		// 整词匹配必须把这两种写法排掉，否则同一台机器会出两条互斥的信创结论。
+		r("os-kylin", FieldUA, Match{Word: []string{"kylin"}, Not: &Match{Contains: []string{"ubuntu kylin", "open kylin"}}, CaseFold: true},
+			"银河麒麟 / 中标麒麟", "发行版", CatOS, 95, 100, "麒麟系发行版的 UA 标识。").xc(),
 		r("os-kylinos", FieldUA, c("kylinos", "kylin-desktop"), "银河麒麟 / 中标麒麟", "发行版", CatOS, 95, 100,
 			"粘连写法的 kylinos 整词匹配不到 kylin，需要单独一条。").xc(),
 		r("os-deepin", FieldUA, w("deepin"), "deepin 深度", "发行版", CatOS, 80, 60,
@@ -132,6 +145,32 @@ func BuiltinRules() []Rule {
 			"信创桌面发行版之一，UA token 待实测。").xc().unverified(),
 		r("os-puhua", FieldUA, c("pvdrvos", "secos"), "普华 OS", "发行版", CatOS, 70, 60,
 			"信创桌面发行版之一，UA token 待实测。").xc().unverified(),
+		r("os-openkylin", FieldUA, c("openkylin", "open kylin"), "openKylin 开放麒麟", "发行版", CatOS, 80, 60,
+			"开放麒麟社区发行版，命中说明是国产 Linux，是否信创机型需与架构信号交叉。").xc().unverified(),
+		r("os-ubuntukylin", FieldUA, c("ubuntukylin", "ubuntu kylin"), "优麒麟 Ubuntu Kylin", "发行版", CatOS, 75, 60,
+			"优麒麟基于 Ubuntu 的国产定制发行版，是否信创机型需与架构信号交叉。").xc().unverified(),
+		r("os-loongnix", FieldUA, c("loongnix"), "Loongnix 龙芯发行版", "发行版", CatOS, 95, 100,
+			"Loongnix 是龙芯官方发行版，只出现在龙芯平台。").xc().unverified(),
+	)
+
+	// --- 国际发行版（FieldUA）：token 来自 uap-core 公开语料与 Firefox/Chromium 的
+	// 发行版定制 UA（如 "(X11; Ubuntu; Linux x86_64)"）。只做识别展示，不参与信创判定。
+	out = append(out,
+		r("os-ubuntu", FieldUA, w("ubuntu", "kubuntu", "lubuntu"), "Ubuntu", "发行版", CatOS, 80, 0,
+			"Firefox 与 Ubuntu 版 Chromium 的 UA 会带发行版名。"),
+		r("os-debian", FieldUA, w("debian"), "Debian", "发行版", CatOS, 80, 0, "uap-core 公开语料 token。"),
+		r("os-fedora", FieldUA, w("fedora"), "Fedora", "发行版", CatOS, 80, 0, "Firefox 的 Fedora 构建 UA。"),
+		r("os-centos", FieldUA, w("centos"), "CentOS", "发行版", CatOS, 80, 0, "uap-core 公开语料 token。"),
+		r("os-redhat", FieldUA, w("red hat", "redhat"), "Red Hat / RHEL", "发行版", CatOS, 80, 0, "uap-core 公开语料 token。"),
+		r("os-opensuse", FieldUA, w("opensuse", "suse"), "openSUSE / SUSE", "发行版", CatOS, 80, 0, "uap-core 公开语料 token。"),
+		r("os-arch", FieldUA, w("arch linux"), "Arch Linux", "发行版", CatOS, 80, 0, "uap-core 公开语料 token。"),
+		r("os-gentoo", FieldUA, w("gentoo"), "Gentoo", "发行版", CatOS, 80, 0, "uap-core 公开语料 token。"),
+		r("os-mint", FieldUA, w("linux mint"), "Linux Mint", "发行版", CatOS, 80, 0, "uap-core 公开语料 token。"),
+		r("os-freebsd", FieldUA, w("freebsd"), "FreeBSD", "发行版", CatOS, 80, 0, "Firefox 的 FreeBSD 构建 UA。"),
+		// LCTE 出现在公开 UA 语料的 IE11 政务定制 Windows 中，是 x86 Windows，
+		// 只做识别展示，不参与信创判定。
+		r("os-lcte", FieldUA, w("lcte"), "政务版 Windows（LCTE）", "发行版", CatOS, 70, 30,
+			"公开 UA 语料中出现在 IE11 的政务定制 Windows（疑似神州网信政府版），x86 架构与信创无关。").cn(),
 	)
 
 	// --- 浏览器（FieldUA / FieldBrand）---
@@ -148,16 +187,36 @@ func BuiltinRules() []Rule {
 			"国产浏览器，但运行在任意系统上，不能作为信创终端证据。").cn(),
 		r("browser-qq", FieldUA, c("qqbrowser", "mqqbrowser"), "QQ 浏览器", "浏览器", CatBrowser, 70, 30,
 			"国产浏览器，非信创终端证据。").cn(),
-		r("browser-sogou", FieldUA, c("metasr"), "搜狗浏览器", "浏览器", CatBrowser, 70, 30, "国产壳浏览器。").cn(),
-		r("browser-uc", FieldUA, c("ucbrowser", "ucweb"), "UC 浏览器", "浏览器", CatBrowser, 70, 30, "国产浏览器。").cn(),
+		r("browser-sogou", FieldUA, c("metasr", "sogoumobilebrowser", "sogoumse"), "搜狗浏览器", "浏览器", CatBrowser, 70, 30,
+			"PC 版带 MetaSr，手机版带 SogouMobileBrowser，均为公开语料证实的 token。").cn(),
+		r("browser-uc", FieldUA, c("ucbrowser", "ucweb", "ubrowser"), "UC 浏览器", "浏览器", CatBrowser, 70, 30,
+			"PC 版 UBrowser、手机版 UCBrowser，公开语料证实。").cn(),
 		r("browser-maxthon", FieldUA, c("maxthon"), "傲游浏览器", "浏览器", CatBrowser, 70, 30, "国产浏览器。").cn(),
-		r("browser-liebao", FieldUA, c("lbbrowser"), "猎豹浏览器", "浏览器", CatBrowser, 70, 30, "国产壳浏览器。").cn(),
+		r("browser-liebao", FieldUA, c("lbbrowser", "liebaofast"), "猎豹浏览器", "浏览器", CatBrowser, 70, 30,
+			"PC 版 LBBROWSER、手机版 liebaofast，公开语料证实。").cn(),
 		r("browser-2345", FieldUA, c("2345chrome", "2345air"), "2345 浏览器", "浏览器", CatBrowser, 70, 30, "国产壳浏览器。").cn(),
 		r("browser-tencent", FieldUA, c("tencenttraveler"), "TT 浏览器", "浏览器", CatBrowser, 70, 30, "国产壳浏览器。").cn(),
+		// 国产移动端浏览器：token 均在 uap-core 公开语料或国内 UA 语料站中证实。
+		r("browser-huawei", FieldUA, c("huaweibrowser"), "华为浏览器", "浏览器", CatBrowser, 70, 30,
+			"华为浏览器随 EMUI/HarmonyOS 分发。").cn(),
+		r("browser-miui", FieldUA, c("miuibrowser"), "小米浏览器", "浏览器", CatBrowser, 70, 30, "MIUI/HyperOS 自带浏览器。").cn(),
+		r("browser-heytap", FieldUA, c("heytapbrowser", "oppobrowser"), "OPPO 浏览器", "浏览器", CatBrowser, 70, 30,
+			"新标识 HeyTapBrowser、旧标识 OppoBrowser，公开语料证实。").cn(),
+		r("browser-vivo", FieldUA, c("vivobrowser"), "vivo 浏览器", "浏览器", CatBrowser, 70, 30, "vivo 自带浏览器。").cn(),
+		r("browser-quark", FieldUA, c("quark/", "quarkpc"), "夸克浏览器", "浏览器", CatBrowser, 70, 30,
+			"阿里夸克，uap-core 与国内 UA 语料均证实 Quark/ 与 QuarkPC token。").cn(),
+		r("browser-honor", FieldUA, c("honorbrowser"), "荣耀浏览器", "浏览器", CatBrowser, 70, 30,
+			"荣耀浏览器，uap-core 公开语料证实（含 bdhonorbrowser 变体）。").cn(),
+		r("browser-baidu", FieldUA, c("baiduboxapp"), "百度 App 内置浏览器", "浏览器", CatBrowser, 70, 30,
+			"百度 App/手机百度的内置 WebView 标识，公开语料证实。").cn(),
 		r("browser-chrome", FieldUA, re(`chrome/[\d.]`), "Google Chrome / Chromium", "内核", CatEngine, 90, 0, ""),
 		r("browser-edge", FieldUA, re(`edg(e|a|ios)?/[\d.]`), "Microsoft Edge", "内核", CatEngine, 90, 0, ""),
 		r("browser-firefox", FieldUA, re(`firefox/[\d.]`), "Firefox", "内核", CatEngine, 90, 0, ""),
 		r("browser-safari", FieldUA, re(`version/[\d.]+ safari/`), "Safari", "内核", CatEngine, 90, 0, ""),
+		// Opera 15+ 用 OPR/，Vivaldi 在 UA 尾部自带版本 token，两者都同时携带 Chrome/，
+		// 同类别并存不算冲突（只有信创结论参与冲突判定）。
+		r("browser-opera", FieldUA, c("opr/"), "Opera", "内核", CatEngine, 90, 0, "Opera 15 之后的 UA 标识。"),
+		r("browser-vivaldi", FieldUA, c("vivaldi/"), "Vivaldi", "内核", CatEngine, 85, 0, "Vivaldi UA 尾部标识。"),
 		// Client Hints 的品牌名与 UA 规则同名，命中即形成跨源一致，能把结论从「疑似」抬到「确认」。
 		r("brand-chrome", FieldBrand, e("google chrome"), "Google Chrome / Chromium", "内核", CatEngine, 90, 0, ""),
 		r("brand-chromium", FieldBrand, e("chromium"), "Google Chrome / Chromium", "内核", CatEngine, 80, 0, ""),

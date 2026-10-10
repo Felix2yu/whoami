@@ -4,9 +4,9 @@
     <span class="headline">{{.Banner.Title}}</span>
     <span class="badge">{{.Banner.Label}}</span>
     {{if ne .Banner.Status "unknown"}}<span class="score">判定分 {{.Banner.Score}}</span>{{end}}
+    <button type="button" class="copybtn" title="复制结论摘要，便于贴进工单或聊天">复制结论</button>
   </div>
   {{range .Banner.Reasons}}<p class="reason">{{.}}</p>{{end}}
-  {{if .Banner.Caveat}}<p class="caveat">{{.Banner.Caveat}}</p>{{end}}
   {{range .Banner.Limits}}<p class="limit">{{.}}</p>{{end}}
 </section>
 

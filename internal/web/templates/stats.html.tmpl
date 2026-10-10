@@ -23,6 +23,7 @@
 <section class="card">
   <div class="row"><span class="k">页面访问</span><span class="v">{{.Visits}}</span><span class="score">独立 IP {{.UniqueIPs}}</span></div>
   {{if .Reports}}<div class="row"><span class="k">浏览器端回报</span><span class="v">{{.Reports}}</span><span class="score">覆盖率 {{printf "%.1f" .JSCoverage}}%</span></div>{{end}}
+  {{if .APICalls}}<div class="row"><span class="k">API 调用</span><span class="v">{{.APICalls}}</span></div>{{end}}
   {{if .Replayed}}<p class="d">启动时回放了 {{.Replayed}} 条历史日志重建计数</p>{{end}}
 </section>
 
@@ -34,21 +35,29 @@
 </section>{{end}}
 {{end}}
 
-<h2 class="section">请求头判定的分布</h2>
+{{if .Server.Status}}<h2 class="section">请求头判定的分布</h2>{{end}}
+{{if .Server.Status}}<h3 class="section">判定状态</h3>{{end}}
 {{template "table" .Server.Status}}
+{{if .Server.OS}}<h3 class="section">操作系统</h3>{{end}}
 {{template "table" .Server.OS}}
+{{if .Server.Arch}}<h3 class="section">CPU 架构</h3>{{end}}
 {{template "table" .Server.Arch}}
+{{if .Server.Browser}}<h3 class="section">浏览器</h3>{{end}}
 {{template "table" .Server.Browser}}
+{{if .Server.Label}}<h3 class="section">IP 归属</h3>{{end}}
 {{template "table" .Server.Label}}
+{{if .Server.Host}}<h3 class="section">嵌入来源</h3>{{end}}
 {{template "table" .Server.Host}}
 
-{{if .Merged.Status}}
-<h2 class="section">合并浏览器端回报后的分布</h2>
+{{if .Merged.Status}}<h2 class="section">合并浏览器端回报后的分布</h2>{{end}}
+{{if .Merged.Status}}<h3 class="section">判定状态</h3>{{end}}
 {{template "table" .Merged.Status}}
+{{if .Merged.Arch}}<h3 class="section">CPU 架构</h3>{{end}}
 {{template "table" .Merged.Arch}}
+{{if .Merged.OS}}<h3 class="section">操作系统</h3>{{end}}
 {{template "table" .Merged.OS}}
+{{if .Merged.Browser}}<h3 class="section">浏览器</h3>{{end}}
 {{template "table" .Merged.Browser}}
-{{end}}
 
 {{if .Daily}}
 <h2 class="section">近 30 天</h2>
@@ -61,7 +70,7 @@
 {{end}}
 
 <footer>
-  <p class="muted">日志目录 {{if .LogDir}}{{.LogDir}}{{else}}未启用{{end}} · 统计口径：页面访问只计 kind=page，回报单独计数。</p>
+  <p class="muted">日志目录 {{if .LogDir}}{{.LogDir}}{{else}}未启用{{end}} · 统计口径：页面访问只计 kind=page，回报与 API 调用各自单独计数。</p>
 </footer>
 
 </body>

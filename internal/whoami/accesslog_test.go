@@ -2,6 +2,7 @@ package whoami
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -242,6 +243,17 @@ func TestStatsObserveCounts(t *testing.T) {
 	if v.Visits != 2 || v.Reports != 1 {
 		t.Errorf("visits=%d reports=%d", v.Visits, v.Reports)
 	}
+	// API 调用单独计数：既不进访问量，也不进状态分布。
+	if v.APICalls != 1 {
+		t.Errorf("apiCalls=%d, want 1", v.APICalls)
+	}
+	total := int64(0)
+	for _, r := range v.Server.Status {
+		total += r.Count
+	}
+	if total != 2 {
+		t.Errorf("server 分布合计 %d, want 2（API 调用不该进分布）", total)
+	}
 	if v.UniqueIPs != 1 {
 		t.Errorf("unique=%d, want 1", v.UniqueIPs)
 	}
@@ -262,6 +274,21 @@ func TestStatsObserveCounts(t *testing.T) {
 	}
 	if v.Server.Status[0].Key != "确认" || v.Server.Status[0].Count != 2 {
 		t.Errorf("status rows = %+v", v.Server.Status)
+	}
+}
+
+// TestStatsUniqueIPsIsBounded 预填到容量上限：IP 由客户端伪造，
+// 独立地址集合必须封顶，之后的新地址不再新增。
+func TestStatsUniqueIPsIsBounded(t *testing.T) {
+	s := NewStats()
+	for i := 0; i < maxUniqueIPs; i++ {
+		s.uniqueIPs[fmt.Sprintf("10.%d.%d.%d", i>>16&255, i>>8&255, i&255)] = true
+	}
+	rec := pageRecord(t, "Mozilla/5.0 (X11; UOS) Chrome/120", time.Now().UTC())
+	rec.Client.IP = "203.0.113.9"
+	s.Observe(rec)
+	if got := s.Snapshot("").UniqueIPs; got != maxUniqueIPs {
+		t.Errorf("unique = %d, want 封顶在 %d", got, maxUniqueIPs)
 	}
 }
 

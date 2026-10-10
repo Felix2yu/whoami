@@ -90,6 +90,8 @@ docker run --rm -p 8080:8080 -v whoami-data:/data whoami
   要限制谁能嵌，配 `-frame-ancestors 'http://host:port'`。
 - **JS 回报是同源请求**：iframe 里的文档由 whoami 自己出，`POST /report` 打回自己这个源，
   所以不需要 CORS 配置。
+- **自适应高度**：页面会向宿主 `postMessage({type:'whoami:height', height})`，
+  宿主按 `e.source` 匹配到对应 iframe 后把 `style.height` 设成该值即可（见 `examples/embed-host.html`）。
 - 宿主页面如果给 iframe 加了 `sandbox` 但没给 `allow-scripts`，JS 不会执行；
   页面会显式写「仅服务端信号，未做跨源交叉验证」，不会假装什么都没发生。
 - 收紧过 `allow` 属性的话需要放行 Client Hints：
@@ -194,8 +196,8 @@ curl -s localhost:8080/api/rules | jq '.rules' > rules.json   # 先拿现成的�
   JS 回报覆盖率。每组按计数降序取前 10，其余并入「其它」。
 - 日志是唯一真源：启动时回放最近 N 天日志重建计数，不引入数据库。重启后 `/stats` 的数字不变。
 - 访客 IP 是个人信息。默认落盘保留完整地址（便于你自己排查），要对外提供服务就开
-  `-anonymize-ip last-octet` 或 `full`；`full` 用进程内随机盐做哈希，
-  看不出原地址但 `独立 IP` 计数仍然正确。
+  `-anonymize-ip last-octet` 或 `full`；`full` 的盐持久化在日志目录 `.anon-salt`（0600），
+  看不出原地址，且重启后 `独立 IP` 计数仍然正确。
 - 默认不外呼任何第三方归属接口。要接你现有的 IP 服务，实现
   `internal/whoami/ipgeo.go` 里的 `IpInfoProvider` 接口即可。
 

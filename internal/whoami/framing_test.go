@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"whoami/internal/web"
 )
 
 func frameRequest(query string, headers map[string]string) *http.Request {
@@ -151,6 +153,35 @@ func TestConfiguredAncestorsAppearInHeader(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), `class="compact"`) {
 		t.Error("顶层文档不该走紧凑版式")
+	}
+}
+
+// 回归：JS 回报片段必须同样遵守 ?hide=/?only=，
+// 否则首屏隐藏的卡片会在回报替换 #report 后重新出现。
+func TestReportFragmentKeepsHideParam(t *testing.T) {
+	const ua = "Mozilla/5.0 (X11; Linux loongarch64) Chrome/102"
+	if body := postReport(t, "/report", ua, `{}`).Body.String(); !strings.Contains(body, "IP 地址") {
+		t.Fatal("无参数回报片段应有 IP 行")
+	}
+
+	rec := postReport(t, "/report?hide=ip", ua, `{}`)
+	if strings.Contains(rec.Body.String(), `<span class="k">IP 地址</span>`) {
+		t.Error("回报片段应遵守 ?hide=ip，IP 行整行消失")
+	}
+	if !strings.Contains(rec.Body.String(), "龙芯 LoongArch") {
+		t.Error("其它结论行不应受 hide=ip 影响")
+	}
+}
+
+// 守卫根因：detect.js 用相对路径请求 /report 时必须带上 location.search，
+// 丢掉 query 就会让上面的服务端开关全部失效。
+func TestDetectJSPassesQueryToReport(t *testing.T) {
+	b, err := web.Static.ReadFile("static/detect.js")
+	if err != nil {
+		t.Fatalf("read detect.js: %v", err)
+	}
+	if !strings.Contains(string(b), "'report' + location.search") {
+		t.Error("detect.js 请求 /report 必须拼接 location.search，否则 ?hide=?only=?embed= 在回报后丢失")
 	}
 }
 

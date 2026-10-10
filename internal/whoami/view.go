@@ -6,6 +6,7 @@ import (
 )
 
 // Banner 是页面顶部的信创结论条。
+// 「未知」的解释由 Verdict.Reasons 提供，这里不再重复一份文案。
 type Banner struct {
 	Status  string
 	Label   string
@@ -13,8 +14,6 @@ type Banner struct {
 	Score   int
 	Reasons []string
 	Limits  []string
-	// Caveat 在「无法判定」时说明为什么判不出来，不能只留一句未知。
-	Caveat string
 }
 
 // Card 是页面上的一行结论。Value 为空的卡片不会被构建，页面也就不会出现占位空行。
@@ -77,7 +76,6 @@ func BuildView(res Result) View {
 		v.Banner.Title = "疑似信创终端"
 	default:
 		v.Banner.Title = "无法判定"
-		v.Banner.Caveat = "未发现信创特征不等于不是信创：UA 可被企业策略冻结，海光/兆芯这类国产 x86 也无法从 HTTP 信号区分。"
 	}
 
 	for _, c := range append([]Card{ipCard(res, res.Evidence)}, findingCards(res.Findings, res.Evidence)...) {
@@ -107,12 +105,35 @@ func BuildView(res Result) View {
 		v.Banner.Limits = append(v.Banner.Limits, res.GeoNote)
 	}
 
-	if res.HasJS {
-		v.JSStatus = "已合并浏览器端回报（Client Hints / WebGL），结论经过跨源交叉验证"
-	} else {
+	// JSStatus 按回报的实际参与程度分档陈述，避免过度承诺：
+	// 收到回报 ≠ 有可用于判定的字段 ≠ 结论真的被跨源印证过，三件事分开说。
+	switch {
+	case !res.HasJS:
 		v.JSStatus = "仅服务端信号，未做跨源交叉验证"
+	case !containsSignalsSource(res.Signals, SourceJS):
+		// 回报里只有时区/屏幕这类展示字段，没进判定管线，
+		// 此时宣称「已交叉验证」会和 Limits 里的缺信号提示自相矛盾。
+		v.JSStatus = "已收到浏览器端回报，但其中没有可用于交叉验证的字段，结论未经跨源交叉验证"
+	default:
+		if n := jsAgreedFindings(res.Findings); n > 0 {
+			v.JSStatus = fmt.Sprintf("已合并浏览器端回报（Client Hints / WebGL），%d 项结论经浏览器端与服务端交叉印证", n)
+		} else {
+			v.JSStatus = "已合并浏览器端回报，但回报信号与服务端没有相互印证的结论"
+		}
 	}
 	return v
+}
+
+// jsAgreedFindings 统计真正被浏览器端与服务端同时印证的结论数：
+// 只有 Sources 里既有 js 又有其它来源的结论才计入，单源结论不算交叉验证。
+func jsAgreedFindings(fs []Finding) int {
+	n := 0
+	for _, f := range fs {
+		if len(f.Sources) > 1 && containsStr(f.Sources, SourceJS) {
+			n++
+		}
+	}
+	return n
 }
 
 func ipCard(res Result, ev []Evidence) Card {

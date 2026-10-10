@@ -2,11 +2,15 @@ package whoami
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -41,6 +45,9 @@ type Config struct {
 	StatsReplayBytes int64
 	// AnonymizeIP 是日志与统计里的地址脱敏方式：off|last-octet|full。
 	AnonymizeIP string
+	// StatsToken 是 /stats 与 /api/stats 的访问口令，留空表示不校验。
+	// 统计页会暴露访客分布，暴露到不可信网络时应配置它。
+	StatsToken string
 	// RulesPath 是外部规则 JSON 文件路径，同 ID 覆盖内置规则。
 	RulesPath string
 	// GeoEndpoint 是 IP 归属查询接口，留空表示不外呼。
@@ -80,7 +87,15 @@ type Server struct {
 	geo       IpInfoProvider
 	rulesFrom RulesSource
 	anonSalt  []byte
-	mux       *http.ServeMux
+	statsRL   *rateLimiter
+
+	// recent 缓存最近几条完整结果，供 /api/record/{id} 按 ID 反查。
+	// ID 是 crypto/rand 的 16 位十六进制，不可枚举；容量封顶防内存增长。
+	recentMu   sync.Mutex
+	recent     map[string]Result
+	recentKeys []string
+
+	mux *http.ServeMux
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -147,18 +162,56 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 	}
 
-	var salt [8]byte
-	if _, err := rand.Read(salt[:]); err != nil {
+	salt, err := loadOrCreateSalt(cfg.LogDir)
+	if err != nil {
 		return nil, fmt.Errorf("生成脱敏盐值失败: %w", err)
 	}
 
 	s := &Server{
 		cfg: cfg, ancestors: cfg.FrameAncestors, trusted: trusted, dict: NewIPDict(cfg.IPDictPath),
 		detector: detector, tmpl: tmpl, assets: assets,
-		log: accessLog, stats: stats, geo: geo, rulesFrom: rulesFrom, anonSalt: salt[:], mux: http.NewServeMux(),
+		log: accessLog, stats: stats, geo: geo, rulesFrom: rulesFrom, anonSalt: salt,
+		statsRL: newRateLimiter(statsRateLimit, statsRateWindow), mux: http.NewServeMux(),
 	}
 	s.routes()
 	return s, nil
+}
+
+// loadOrCreateSalt 返回脱敏哈希用的盐。开启日志落盘时把它持久化到日志目录：
+// 日志里存的是哈希结果，重启后必须用同一把盐，同一访客才会哈希成同一个标识，
+// 否则「独立 IP」计数会跨重启翻倍。未落盘时没有跨重启的真源，每次启动生成即可。
+func loadOrCreateSalt(logDir string) ([]byte, error) {
+	var salt [16]byte
+	if logDir == "" {
+		if _, err := rand.Read(salt[:]); err != nil {
+			return nil, err
+		}
+		return salt[:], nil
+	}
+	path := filepath.Join(logDir, ".anon-salt")
+	if b, err := os.ReadFile(path); err == nil && len(b) >= 16 {
+		return b[:16], nil
+	}
+	if _, err := rand.Read(salt[:]); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return nil, err
+		}
+		// 并发启动时别人先建好了：读它的，保证大家用同一把盐。
+		b, err := os.ReadFile(path)
+		if err != nil || len(b) < 16 {
+			return nil, fmt.Errorf("读取 %s 失败或内容过短", path)
+		}
+		return b[:16], nil
+	}
+	defer f.Close()
+	if _, err := f.Write(salt[:]); err != nil {
+		return nil, err
+	}
+	return salt[:], nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

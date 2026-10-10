@@ -85,19 +85,33 @@
     return body;
   }
 
+  // note 在 #report 末尾插一行状态文字并返回节点，调用方持有引用以便更新或随替换消失。
   function note(text) {
     var host = document.getElementById('report');
-    if (!host) return;
+    if (!host) return null;
     var p = document.createElement('p');
     p.className = 'muted';
     p.textContent = text;
     host.appendChild(p);
+    return p;
+  }
+
+  // reportHeight 把当前内容高度发给宿主页面，宿主据此调整 iframe 高度。
+  // 只发 type 与 height 两个字段；targetOrigin 用 '*' 是因为宿主可能是任意跨源页面。
+  function reportHeight() {
+    if (window.parent === window) return;
+    try {
+      window.parent.postMessage({ type: 'whoami:height', height: document.documentElement.scrollHeight }, '*');
+    } catch (e) { /* 宿主不监听也没有副作用 */ }
   }
 
   function send(body) {
+    var status = note('正在合并浏览器端回报…');
     var ctrl = new AbortController();
     var timer = setTimeout(function () { ctrl.abort(); }, 3000);
-    fetch('report', {
+    // 带上 location.search：?hide=/?only=/?embed= 必须传给 /report，
+    // 否则回报片段替换 #report 后卡片开关会全部失效。
+    fetch('report' + location.search, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -110,16 +124,108 @@
         return r.text();
       })
       .then(function (html) {
+        // 整块替换会连同加载提示一起清掉，无需手动移除。
         var host = document.getElementById('report');
         if (host) host.innerHTML = html;
+        // 替换后内容高度会变，重新通知宿主。
+        reportHeight();
       })
       .catch(function (e) {
         clearTimeout(timer);
-        note('浏览器端回报失败（' + e.message + '），以上仅为服务端信号');
+        if (!status) return;
+        var msg = e && e.name === 'AbortError' ? '3 秒超时' : (e && e.message) || e;
+        status.textContent = '浏览器端回报失败（' + msg + '），以上仅为服务端信号 ';
+        var retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'linklike';
+        retry.textContent = '重试';
+        retry.addEventListener('click', function () {
+          status.remove();
+          send(body);
+        });
+        status.appendChild(retry);
       });
   }
 
+  // summaryText 从服务端渲染好的 DOM 组装纯文本结论，页面文案仍只有服务端一套。
+  function summaryText() {
+    var lines = [];
+    var b = document.querySelector('.banner');
+    if (b) {
+      var head = b.querySelector('.headline');
+      var badge = b.querySelector('.badge');
+      var score = b.querySelector('.score');
+      lines.push(
+        '信创结论：' + (head ? head.textContent : '') +
+        (badge ? '（' + badge.textContent + '）' : '') +
+        (score ? ' ' + score.textContent : '')
+      );
+      var reasons = b.querySelectorAll('.reason');
+      for (var i = 0; i < reasons.length; i++) {
+        lines.push('· ' + reasons[i].textContent);
+      }
+    }
+    var cards = document.querySelectorAll('main .card');
+    for (var j = 0; j < cards.length; j++) {
+      var k = cards[j].querySelector('.k');
+      var v = cards[j].querySelector('.v');
+      if (!k || !v) continue;
+      var cb = cards[j].querySelector('.badge');
+      var line = k.textContent + '：' + v.textContent + (cb ? '（' + cb.textContent + '）' : '');
+      var d = cards[j].querySelector('.d');
+      if (d) line += '　' + d.textContent;
+      lines.push(line);
+    }
+    var foot = document.querySelector('footer .muted');
+    if (foot) lines.push(foot.textContent);
+    return lines.join('\n');
+  }
+
+  // legacyCopy 用隐藏 textarea + execCommand 复制，返回是否成功。
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  // copyText 返回 Promise<boolean>。Clipboard API 会因文档未聚焦等原因拒绝，
+  // 必须接住并降级到 execCommand，否则失败会变成未捕获异常且按钮毫无反馈。
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { return legacyCopy(text); }
+      );
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+
+  // 委托监听：#report 会被回报片段整块替换，按钮节点必须走事件委托。
+  function bindCopy() {
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains('copybtn')) return;
+      copyText(summaryText()).then(function (ok) {
+        var old = t.textContent;
+        t.textContent = ok ? '已复制' : '复制失败';
+        setTimeout(function () { t.textContent = old; }, 2000);
+      });
+    });
+  }
+
   function run() {
+    bindCopy();
+    // 自适应高度：初始渲染、窗口变化、资源加载完毕都重新上报一次。
+    reportHeight();
+    window.addEventListener('resize', reportHeight);
+    window.addEventListener('load', reportHeight);
     // 页面已经在跑，说明 JavaScript 可用；这一条本身就是「未回报」提示的修正。
     readHints().then(function (hints) {
       send(collect(hints));

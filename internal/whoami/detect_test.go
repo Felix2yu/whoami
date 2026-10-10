@@ -192,6 +192,34 @@ func TestPlatformSuppressionBlocksArmFalsePositive(t *testing.T) {
 	}
 }
 
+func TestMacAndWindowsArmAreNotXinchuang(t *testing.T) {
+	// Apple Silicon 与 Windows on ARM 同样上报 aarch64，平台规则必须压掉信创含义，
+	// 否则 M 系列 Mac 会被判成 50 分疑似信创。
+	for _, tc := range []struct{ name, platform, ua string }{
+		{"Apple Silicon", "macos",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TRAESOLOCN/1.107.1 Chrome/142.0.7444.235 Electron/39.2.7 Safari/537.36"},
+		{"Windows on ARM", "windows",
+			"Mozilla/5.0 (Windows NT 10.0; ARM64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+	} {
+		d := builtinDetector(t)
+		ss := Signals{
+			sig(FieldUA, tc.ua, SourceHeader),
+			sig(FieldPlatform, tc.platform, SourceHeader),
+			sig(FieldArch, "aarch64", SourceJS),
+			sig(FieldArch, "aarch64", SourceCH),
+		}
+		fs, v := d.score(ss)
+		if v.Status == "suspect" || v.Status == "confirmed" {
+			t.Errorf("%s 被判成信创：%+v %s", tc.name, v, findingsString(fs))
+		}
+		for _, f := range fs {
+			if f.Name == "ARM 64 位" && f.Xinchuang {
+				t.Errorf("%s：抑制后 ARM 结论不应再参与信创判定", tc.name)
+			}
+		}
+	}
+}
+
 func TestUnknownNeverClaimsNonXinchuang(t *testing.T) {
 	v, _ := verdictOf(t, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
 	if v.Status != "unknown" {
@@ -210,14 +238,14 @@ func TestLimitsMentionMissingClientReport(t *testing.T) {
 	d := builtinDetector(t)
 	_, v := d.score(uaSignals("Mozilla/5.0 (X11; Linux loongarch64) Chrome/102"))
 	joined := strings.Join(v.Limits, "|")
-	if !strings.Contains(joined, "没有收到浏览器端回报") {
+	if !strings.Contains(joined, "没有可用于交叉验证的信号") {
 		t.Errorf("仅有服务端信号时应提示未经交叉验证：%s", joined)
 	}
 
 	ss := append(uaSignals("Mozilla/5.0 (X11; Linux loongarch64) Chrome/102"), sig(FieldGPU, "Jingjia Micro JM9", SourceJS))
 	_, v2 := d.score(ss)
 	joined2 := strings.Join(v2.Limits, "|")
-	if strings.Contains(joined2, "没有收到浏览器端回报") {
+	if strings.Contains(joined2, "没有可用于交叉验证的信号") {
 		t.Errorf("已收到 JS 回报后不该再出现该提示：%s", joined2)
 	}
 	if strings.Contains(joined2, "没有 GPU 信号") {

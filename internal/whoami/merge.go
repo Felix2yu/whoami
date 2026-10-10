@@ -246,7 +246,7 @@ var platformAliases = map[string]string{
 	"linux": "linux", "chrome os": "chromeos", "chromos": "chromeos",
 	"cros": "chromeos", "android": "android", "ios": "ios",
 	"openbsd": "openbsd", "freebsd": "freebsd", "netbsd": "netbsd",
-	"harmonyos": "harmonyos",
+	"harmonyos": "harmonyos", "openharmony": "harmonyos",
 }
 
 func normalizePlatform(p string) string {

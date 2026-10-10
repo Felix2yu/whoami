@@ -56,7 +56,19 @@ body {
 .row .k { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .row .v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .headline { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.row .badge, .row .score { flex: 0 0 auto; white-space: nowrap; }
+.row .badge, .row .score, .row .copybtn { flex: 0 0 auto; white-space: nowrap; }
+
+/* 复制结论：实心描边小按钮，不抢结论本身的视觉权重 */
+.copybtn {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.copybtn:hover { border-color: var(--ok); color: var(--ok); }
 
 .badge {
   padding: 1px 8px;
@@ -123,8 +135,21 @@ summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .section { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--muted); }
 
 h2.section { font-size: 14px; }
+h3.section { font-size: 13px; margin: 12px 0 4px; }
 
 a { color: var(--ok); }
+
+/* 回报失败后的「重试」：行内文字样式的按钮 */
+button.linklike {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-left: 4px;
+  font: inherit;
+  color: var(--ok);
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 .cut { color: var(--warn); font-style: normal; margin-left: 6px; font-size: 11px; }
 

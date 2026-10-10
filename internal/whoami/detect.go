@@ -316,8 +316,10 @@ func buildVerdict(fs []Finding, ss Signals) Verdict {
 // genericLimits 说明本轮判定缺少的交叉验证。
 func genericLimits(ss Signals, fs []Finding) []string {
 	var out []string
+	// 措辞只谈信号、不谈「是否收到回报」：空回报（HasJS=true 但无 js 信号）时
+	// 也要成立，否则会和 JSStatus 的「已收到浏览器端回报」自相矛盾。
 	if !containsSignalsSource(ss, SourceJS) {
-		out = append(out, "没有收到浏览器端回报，全部结论只来自请求头，未经跨源交叉验证")
+		out = append(out, "浏览器端没有可用于交叉验证的信号，全部结论只来自请求头，未经跨源交叉验证")
 	}
 	if !containsSignalsSource(ss, FieldGPU) && !hasCategory(fs, CatGPU) {
 		out = append(out, "没有 GPU 信号：WebGL 被禁用或浏览器未上报时，无法验证景嘉微/摩尔线程这类国产显卡")
@@ -361,15 +363,6 @@ func firstNonEmpty(ss []string, fallback string) string {
 		}
 	}
 	return fallback
-}
-
-func sameStrings(v []string) bool {
-	for _, s := range v[1:] {
-		if s != v[0] {
-			return false
-		}
-	}
-	return true
 }
 
 func sortFindings(fs []Finding) {

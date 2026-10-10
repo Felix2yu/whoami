@@ -60,6 +60,7 @@ type StatsView struct {
 	Enabled     bool         `json:"enabled"`
 	Visits      int64        `json:"visits"`
 	Reports     int64        `json:"reports"`
+	APICalls    int64        `json:"apiCalls"`
 	UniqueIPs   int64        `json:"uniqueIps"`
 	JSCoverage  float64      `json:"jsCoverage"`
 	Replayed    int64        `json:"replayed"`
@@ -73,12 +74,17 @@ type Stats struct {
 	mu        sync.Mutex
 	visits    int64
 	reports   int64
+	apiCalls  int64
 	uniqueIPs map[string]bool
 	server    *Counters
 	merged    *Counters
 	daily     map[string]*DailyRow
 	replayed  int64
 }
+
+// maxUniqueIPs 限制独立 IP 集合的容量：IP 由客户端可控，无上限的 map
+// 会被伪造来源的流量撑爆。到达上限后停止新增（已有 IP 仍正常去重）。
+const maxUniqueIPs = 100_000
 
 func NewStats() *Stats {
 	return &Stats{
@@ -101,11 +107,17 @@ func (s *Stats) Observe(rec LogRecord) {
 		countInto(s.merged, rec.Result)
 	case KindPage:
 		s.visits++
-		if rec.Client.IP != "" {
-			s.uniqueIPs[rec.Client.IP] = true
+		if ip := rec.Client.IP; ip != "" {
+			if _, seen := s.uniqueIPs[ip]; !seen && len(s.uniqueIPs) < maxUniqueIPs {
+				s.uniqueIPs[ip] = true
+			}
 		}
 		countInto(s.server, rec.Result)
 		s.dayRow(rec.Time).bucket(rec.Result.Verdict.Status)
+	case KindAPI:
+		// /api/whoami 只计调用量：脚本轮询既不算页面访问也不进分布，
+		// 否则会把访客数与 JS 覆盖率一起污染。
+		s.apiCalls++
 	}
 }
 
@@ -207,6 +219,7 @@ func (s *Stats) Snapshot(logDir string) StatsView {
 		Enabled:     logDir != "",
 		Visits:      s.visits,
 		Reports:     s.reports,
+		APICalls:    s.apiCalls,
 		UniqueIPs:   int64(len(s.uniqueIPs)),
 		Replayed:    s.replayed,
 		Server:      s.server.view(),
