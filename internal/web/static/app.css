@@ -149,10 +149,8 @@ button.linklike {
 
 footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
 
-/* 紧凑模式：嵌进别人页面的 iframe 时去掉标题与留白 */
+/* 紧凑模式：嵌进别人页面的 iframe 时去掉留白 */
 body.compact { padding: 8px 8px 10px; max-width: none; }
-body.compact .head h1 { display: none; }
-body.compact .head { margin-bottom: 6px; }
 body.compact .rows > tbody > tr > th { width: 7.5em; }
 body.compact .rows > tbody > tr > td { font-size: 13px; }
 body.compact footer { margin-top: 8px; }
