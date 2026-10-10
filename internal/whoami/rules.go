@@ -253,6 +253,18 @@ func BuiltinRules() []Rule {
 			"摩尔线程 MTT 系列为国产显卡。").xc(),
 		r("gpu-loongson", FieldGPU, c("loongson"), "龙芯集成显卡", "GPU", CatGPU, 80, 80, "GPU 串里带 Loongson 基本可定龙芯平台。").xc(),
 		r("gpu-innosilicon", FieldGPU, c("innosilicon"), "芯动科技 GPU", "GPU", CatGPU, 75, 70, "国产 GPU，覆盖面小。").xc(),
+		// WebGL 串不受 https 限制，是 UA 被策略冻结时唯一还能说出整机身份的字段。
+		// Apple 显卡只随 Apple 整机出货，而 macOS/iOS 本身就不在信创目录内，所以它可以给否定结论。
+		r("gpu-apple", FieldGPU, w("apple"), "Apple 显卡", "GPU", CatGPU, 90, 0,
+			"Apple GPU 只出现在 Apple 整机上，而 macOS/iOS 不在信创目录内。WebGL 串不受 https 限制，UA 被冻结时它仍有效。").foreign(),
+		// 境外显卡**不给**否定结论：国产整机同样可能插 Intel/NVIDIA 独显，
+		// 判「不是」的权力只留给能确定整机的信号（系统家族、Apple 显卡、国产指令集）。
+		r("gpu-foreign", FieldGPU, c("nvidia", "geforce", "quadro", "radeon", "amd", "intel",
+			"uhd graphics", "hd graphics", "iris", "adreno", "mali", "powervr"), "境外显卡", "GPU", CatGPU, 60, 0,
+			"境外厂商的显卡，但不构成否定结论：海光、兆芯的整机也可能插 Intel/NVIDIA 独显。"),
+		r("gpu-vm", FieldGPU, c("virtualbox", "vmware", "qemu", "bochs", "virtio", "basic render driver"),
+			"虚拟/云桌面显卡", "GPU", CatGPU, 60, 0,
+			"这是虚拟机或云桌面的虚拟 GPU，看到的不是物理终端的显卡，别拿它判断终端归属。"),
 		r("gpu-software", FieldGPU, re(`swiftshader|llvmpipe|software`), "软件渲染", "GPU", CatGPU, 0, 0,
 			"拿不到真实 GPU：WebGL 被禁用、走软件渲染或被策略屏蔽 unmasked 参数。此项不构成任何否定结论。"),
 	)

@@ -256,6 +256,50 @@ func TestForeignPlatformIsADefiniteNegative(t *testing.T) {
 	}
 }
 
+// WebGL 串不受 https 限制，但只有 Apple 显卡能定整机；
+// Intel/NVIDIA/虚拟显卡都可能出现在国产整机上，说「不是」就是误伤。
+func TestOnlyAppleGPUCanNegate(t *testing.T) {
+	d := builtinDetector(t)
+	// 政企冻结串：UA 里没有系统家族信息，只剩架构。
+	base := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+	score := func(gpu string) (Verdict, []Finding) {
+		t.Helper()
+		fs, v := d.score(Signals{
+			sig(FieldUA, base, SourceHeader),
+			sig(FieldGPU, gpu, SourceJS),
+		})
+		return v, fs
+	}
+	for _, apple := range []string{
+		"Apple M1, or similar Apple", // Firefox 降熵后的写法
+		"ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version) Google Inc. (Apple)",
+		"Apple GPU Apple Inc.", // Safari / iOS
+	} {
+		v, fs := score(apple)
+		if v.Status != "excluded" {
+			t.Errorf("%q 应判「不是」，实际 %s：%s", apple, v.Status, findingsString(fs))
+		}
+	}
+	for _, gpu := range []string{
+		"ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11) NVIDIA",
+		"ANGLE (Intel, Intel(R) UHD Graphics 630, Direct3D11) Intel",
+		"ANGLE (Microsoft, Microsoft Basic Render Driver) Microsoft",
+		"ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device)) Google",
+	} {
+		if v, _ := score(gpu); v.Status != "unknown" {
+			t.Errorf("%q 不该给否定结论，实际 %s", gpu, v.Status)
+		}
+	}
+	// 信创信号仍然优先：龙芯机器 + 伪造的 Apple 显卡串，判「是」不判「不是」。
+	_, v := d.score(Signals{
+		sig(FieldArch, "loongarch64", SourceHeader),
+		sig(FieldGPU, "Apple M1 Apple", SourceJS),
+	})
+	if v.Status != "confirmed" {
+		t.Errorf("信创信号应压过境外显卡，实际 %s", v.Status)
+	}
+}
+
 func TestForeignYieldsToXinchuangEvidenceAndStaysQuietOnAndroid(t *testing.T) {
 	// 麒麟浏览器 + Windows：信创信号优先，仍是疑似，不能说「不是」——
 	// 奇安信浏览器本身也有 Windows 版，谁更硬要交给打分而不是系统家族。

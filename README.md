@@ -103,6 +103,8 @@ docker run --rm -p 8080:8080 -v whoami-data:/data whoami
   `allow="ch-ua-arch; ch-ua-model; ch-ua-platform; ch-ua-platform-version; ch-ua-full-version-list"`。
 - 非 https（内网直连 IP 很常见）时浏览器可能不给高熵值，页面对应字段整行不渲染，
   并在 `?detail=1` 的证据区说明 `js.hintsUnavailable`。
+  受这个限制的是 `设备内存`、`系统版本`、CH 的 `architecture`/`model`；
+  **不受影响的**有 WebGL 显卡串、逻辑核心数、屏幕、时区、语言——所以 http 下也照样能判「不是」。
 - 不使用任何浏览器存储，所以第三方 iframe 的存储分区策略对它没有影响。
 
 跨源 iframe 的实测可以在本地起一个宿主页：
@@ -154,10 +156,13 @@ r("cpu-loongarch64", FieldArch, e("loongarch64", "loongarch"), "龙芯 LoongArch
 7. **天花板**：`Ceiling` 是「这类信号单独最多能说明到什么程度」。
    跨源一致**突破不了它**——两个来源都同意「这是 aarch64」，也只能证明架构，
    不能证明它是飞腾还是树莓派。
-8. **境外平台**：`Foreign` 标记「确证在信创目录之外」的系统家族。没有任何信创信号、
-   且境外系统证据 ≥80 时给 `excluded`（页面显示「不是」）；有信创信号时仍以信创信号为准
+8. **境外平台**：`Foreign` 标记「确证在信创目录之外」的信号。没有任何信创信号、
+   且境外证据 ≥80 时给 `excluded`（页面显示「不是」）；有信创信号时仍以信创信号为准
    （奇安信浏览器也有 Windows 版，谁更硬交给打分，不由系统家族一票否决）。
-   安卓与鸿蒙**不给**否定结论：国产平板和鸿蒙兼容层同样报 Android。
+   目前只有两类信号够格：**系统家族**（macOS/Windows/iOS/ChromeOS/BSD）和
+   **Apple 显卡**（WebGL 串里的 `Apple` 只能来自 Apple 整机）。
+   安卓与鸿蒙**不给**否定结论：国产平板和鸿蒙兼容层同样报 Android；
+   Intel/NVIDIA/AMD 显卡也不给：国产整机照样插境外独显。
 
 置信度阈值：`≥80 确认`、`≥40 疑似`、其余 `未知`；`excluded` 走上面第 8 条，不参与打分。
 
@@ -193,7 +198,7 @@ curl -s localhost:8080/api/rules | jq '.rules' > rules.json   # 先拿现成的�
 | Safari 的精简 UA | 平台细节缺失，Apple 芯片连架构都不给（macOS 家族本身已足够判「不是」） |
 | 浏览器禁用 JS、iframe `sandbox` 缺 `allow-scripts` | 只有请求头信号 |
 | 非安全上下文（内网 http） | Client Hints 高熵值可能拿不到 |
-| WebGL 被禁用或屏蔽 unmasked 参数 | 没有 GPU 旁证；软件渲染（SwiftShader/llvmpipe）不算反证 |
+| WebGL 被禁用或屏蔽 unmasked 参数 | 没有 GPU 旁证；软件渲染（SwiftShader/llvmpipe）与虚拟显卡不算反证。例外是 `Apple` 串，它能单独给「不是」 |
 | WSL2、容器 | 上报 Linux，宿主信息缺失 |
 | DevTools / 代理伪造 | 所有信号都可伪造，包括 WebGL 厂商串 |
 

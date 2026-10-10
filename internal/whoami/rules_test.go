@@ -226,7 +226,11 @@ func TestEveryRuleHitsItsProbe(t *testing.T) {
 		FieldArch:     {"loongarch64", "sw_64", "mips64", "mips", "aarch64", "arm64", "riscv64", "arm", "ppc64", "x86_64", "x86_32"},
 		FieldPlatform: {"linux", "windows", "macos", "android", "ios", "chromeos", "harmonyos", "freebsd", "openbsd", "netbsd"},
 		FieldBrand:    {"google chrome", "chromium", "microsoft edge", "firefox", "kylin", "uos", "qaxbrowser"},
-		FieldGPU:      {"Jingjia Micro JM910", "Moore Threads MTT S80", "Loongson 7A", "Innosilicon IDX", "Google Inc. (Intel) SwiftShader", "llvmpipe"},
+		FieldGPU: {"Jingjia Micro JM910", "Moore Threads MTT S80", "Loongson 7A", "Innosilicon IDX",
+			"Google Inc. (Intel) SwiftShader", "llvmpipe",
+			"Apple M1, or similar Apple", "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version) Google Inc. (Apple)",
+			"ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11) NVIDIA", "ANGLE (AMD, Radeon RX 6600) AMD",
+			"VMware SVGA II Adapter VMware", "ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11) Microsoft"},
 	}
 	unverified := 0
 	for _, ru := range d.Rules() {
