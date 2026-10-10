@@ -14,6 +14,7 @@ type Framing struct {
 	Site     string // Sec-Fetch-Site：cross-site / same-origin / same-site / none
 	Dest     string // Sec-Fetch-Dest：iframe / document / ...
 	Referer  string // 宿主页面地址，统计页按它归类嵌入来源
+	Detail   bool   // ?detail=1：展开判定依据与原始证据
 	Hidden   map[string]bool
 }
 
@@ -59,7 +60,11 @@ func framingOf(r *http.Request) Framing {
 
 	q := r.URL.Query()
 	if v := q.Get("embed"); v != "" {
-		f.Embedded = v == "1" || strings.EqualFold(v, "true")
+		f.Embedded = truthy(v)
+	}
+	// 页面默认只有一张最小结果表；判定依据、边界提示与原始证据都要 ?detail=1 才给。
+	if v := q.Get("detail"); v != "" {
+		f.Detail = truthy(v)
 	}
 
 	hidden := map[string]bool{}
@@ -82,6 +87,15 @@ func framingOf(r *http.Request) Framing {
 	return f
 }
 
+// truthy 认 1/true/on/yes；其余写法一律按关闭处理，避免 ?detail=0 被当成开启。
+func truthy(v string) bool {
+	switch strings.ToLower(v) {
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return false
+}
+
 func splitKeys(list string) []string {
 	var out []string
 	for _, k := range strings.Split(list, ",") {
@@ -95,7 +109,7 @@ func splitKeys(list string) []string {
 // allCardKeys 是 ?hide=/?only= 能控制的开关集合。
 func allCardKeys() []string {
 	return []string{
-		"ip", CatOS, CatCPU, CatBrowser, CatGPU, CatPlatform, CatEngine,
+		KeyVerdict, "ip", CatOS, CatCPU, CatBrowser, CatGPU, CatPlatform, CatEngine,
 		"cores", "memory", "screen", "timezone", "model", "platformV", "gpuRaw", "hints", "geo",
 		"extras", "evidence",
 	}
@@ -116,8 +130,11 @@ func hostOf(referer string) string {
 // applyFraming 把嵌入上下文落到视图上。
 func (v View) applyFraming(f Framing) View {
 	v.Compact = f.Embedded
+	v.Detail = f.Detail
 	if f.Hidden["evidence"] {
 		v.Evidence = nil
+		v.Cards = stripEvidence(v.Cards)
+		v.Extras = stripEvidence(v.Extras)
 	}
 	v.Cards = filterCards(v.Cards, f.Hidden)
 	v.Extras = filterCards(v.Extras, f.Hidden)
@@ -137,6 +154,16 @@ func filterCards(cs []Card, hidden map[string]bool) []Card {
 			continue
 		}
 		out = append(out, c)
+	}
+	return out
+}
+
+// stripEvidence 摘掉行内的原始证据，让 ?hide=evidence 在 ?detail=1 下同样成立。
+func stripEvidence(cs []Card) []Card {
+	out := make([]Card, len(cs))
+	for i, c := range cs {
+		c.Evidence = nil
+		out[i] = c
 	}
 	return out
 }

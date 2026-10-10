@@ -2,37 +2,30 @@ package whoami
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
-// Banner 是页面顶部的信创结论条。
-// 「未知」的解释由 Verdict.Reasons 提供，这里不再重复一份文案。
-type Banner struct {
-	Status  string
-	Label   string
-	Title   string
-	Score   int
-	Reasons []string
-	Limits  []string
-}
+// KeyVerdict 是「是否信创」这一行的开关名，和卡片一起受 ?hide= / ?only= 管。
+const KeyVerdict = "verdict"
 
-// Card 是页面上的一行结论。Value 为空的卡片不会被构建，页面也就不会出现占位空行。
+// Card 是结果表里的一行。最小视图只渲染 Title 与 Value（外加短值 Detail）；
+// Sources / Notes / Evidence 是判定材料，只有 ?detail=1 才展开。Value 为空的行不会被构建。
 type Card struct {
 	Key      string
 	Title    string
 	Value    string
-	Status   string
-	Label    string
 	Detail   string
 	Sources  []string
-	Evidence []Evidence
 	Notes    []string
+	Evidence []Evidence
 }
 
 // View 是模板渲染所需的全部内容。
 type View struct {
-	Result   Result
-	Banner   Banner
+	Result Result
+	// Cards 是判定行（「是否信创」打头，其后是 IP 与各类别结论），Extras 是展示行，
+	// 两组合并成页面上的同一张表，见 Rows。
 	Cards    []Card
 	Extras   []Card
 	Evidence []Evidence
@@ -40,12 +33,40 @@ type View struct {
 	JSStatus string
 	// Compact 是嵌入到别的页面 iframe 里时的紧凑模式。
 	Compact bool
+	// Detail 是 ?detail=1：把判定理由、边界提示与原始证据放回页面。
+	Detail bool
 	// Hidden 是 ?hide= 的卡片白名单，供「只让谁显示」的通用开关。
 	Hidden map[string]bool
 }
 
-// HasContent 判断视图是否有可渲染内容，模板据此避免空壳。
-func (v View) HasContent() bool { return len(v.Cards) > 0 || len(v.Extras) > 0 }
+// Rows 把判定行和展示行并成一张表，并按 rowOrder 重排：
+// 页面不再区分「结论卡片」与「其它信号」，强关联的行必须挨在一起。
+func (v View) Rows() []Card {
+	rows := make([]Card, 0, len(v.Cards)+len(v.Extras))
+	rows = append(rows, v.Cards...)
+	rows = append(rows, v.Extras...)
+	sort.SliceStable(rows, func(i, j int) bool { return rowRank(rows[i].Key) < rowRank(rows[j].Key) })
+	return rows
+}
+
+// rowOrder 是行序表：结论 → 网络与归属 → 系统 → CPU 与内存 → GPU → 浏览器 → 其它展示。
+var rowOrder = map[string]int{
+	KeyVerdict: 0,
+	"ip":       10, "geo": 11,
+	CatPlatform: 20, CatOS: 21, "platformV": 22,
+	CatCPU: 30, "cores": 31, "memory": 32,
+	CatGPU: 40, "gpuRaw": 41,
+	CatBrowser: 50, CatEngine: 51, "hints": 52,
+	"model": 60, "screen": 61, "timezone": 62,
+}
+
+// rowRank 给没登记的新键一个统一的末位，避免它插进已有分组中间。
+func rowRank(key string) int {
+	if n, ok := rowOrder[key]; ok {
+		return n
+	}
+	return len(rowOrder)
+}
 
 func StatusLabel(status string) string {
 	switch status {
@@ -53,6 +74,23 @@ func StatusLabel(status string) string {
 		return "确认"
 	case "suspect":
 		return "疑似"
+	case "excluded":
+		return "不是"
+	default:
+		return "未知"
+	}
+}
+
+// verdictAnswer 是「是否信创」这一行的取值。判不出来才说「未知」：
+// macOS/Windows 这类确证信号给「不是」，别把有证据的否定也一并含糊掉。
+func verdictAnswer(status string) string {
+	switch status {
+	case "confirmed":
+		return "是"
+	case "suspect":
+		return "疑似"
+	case "excluded":
+		return "不是"
 	default:
 		return "未知"
 	}
@@ -62,23 +100,8 @@ func StatusLabel(status string) string {
 func BuildView(res Result) View {
 	v := View{Result: res, Evidence: res.Evidence, Hidden: map[string]bool{}}
 
-	v.Banner = Banner{
-		Status:  res.Verdict.Status,
-		Label:   StatusLabel(res.Verdict.Status),
-		Score:   res.Verdict.Score,
-		Reasons: res.Verdict.Reasons,
-		Limits:  res.Verdict.Limits,
-	}
-	switch res.Verdict.Status {
-	case "confirmed":
-		v.Banner.Title = "信创终端"
-	case "suspect":
-		v.Banner.Title = "疑似信创终端"
-	default:
-		v.Banner.Title = "无法判定"
-	}
-
-	for _, c := range append([]Card{ipCard(res, res.Evidence)}, findingCards(res.Findings, res.Evidence)...) {
+	src := append([]Card{verdictCard(res), ipCard(res, res.Evidence)}, findingCards(res.Findings, res.Evidence)...)
+	for _, c := range src {
 		if c.Value != "" {
 			v.Cards = append(v.Cards, c)
 		}
@@ -95,14 +118,6 @@ func BuildView(res Result) View {
 	}
 	for _, c := range geoCards(res) {
 		v.Extras = append(v.Extras, c)
-	}
-
-	if res.GeoProvider != "" {
-		v.Banner.Limits = append(v.Banner.Limits,
-			"归属信息来自外部接口 "+res.GeoProvider+"，启用它意味着已把访客 IP 交给该接口")
-	}
-	if res.GeoNote != "" {
-		v.Banner.Limits = append(v.Banner.Limits, res.GeoNote)
 	}
 
 	// JSStatus 按回报的实际参与程度分档陈述，避免过度承诺：
@@ -136,6 +151,18 @@ func jsAgreedFindings(fs []Finding) int {
 	return n
 }
 
+// verdictCard 是「是否信创」这一行。最小视图只给三态短答，判定分、依据和
+// 边界提示都放进 Notes，只有 ?detail=1 才展开——顶部不再挂一条强调结论的横幅。
+func verdictCard(res Result) Card {
+	c := Card{Key: KeyVerdict, Title: "是否信创", Value: verdictAnswer(res.Verdict.Status)}
+	if res.Verdict.Score > 0 {
+		c.Notes = append(c.Notes, fmt.Sprintf("判定分 %d/100", res.Verdict.Score))
+	}
+	c.Notes = append(c.Notes, res.Verdict.Reasons...)
+	c.Notes = append(c.Notes, res.Verdict.Limits...)
+	return c
+}
+
 func ipCard(res Result, ev []Evidence) Card {
 	c := Card{Key: "ip", Title: "IP 地址", Value: "未取得", Evidence: evidenceFor(ev, SourceConn, SourceIP)}
 	if res.Client.IP == "" {
@@ -166,6 +193,13 @@ func ipCard(res Result, ev []Evidence) Card {
 	}
 	if res.Client.Note != "" {
 		c.Notes = append(c.Notes, res.Client.Note)
+	}
+	if res.GeoProvider != "" {
+		c.Notes = append(c.Notes,
+			"归属信息来自外部接口 "+res.GeoProvider+"，启用它意味着已把访客 IP 交给该接口")
+	}
+	if res.GeoNote != "" {
+		c.Notes = append(c.Notes, res.GeoNote)
 	}
 	return c
 }
@@ -199,23 +233,17 @@ func extraCards(fs []Finding, ev []Evidence) []Card {
 }
 
 func cardOf(f Finding, ev []Evidence) Card {
-	status := "unknown"
-	switch {
-	case f.Confidence >= ConfidenceConfirmed:
-		status = "confirmed"
-	case f.Confidence >= ConfidenceSuspect:
-		status = "suspect"
-	}
 	c := Card{
 		Key:      f.Category,
 		Title:    categoryLabel(f.Category),
 		Value:    f.Name,
-		Status:   status,
-		Label:    StatusLabel(status),
 		Sources:  f.Sources,
-		Notes:    f.Notes,
 		Evidence: evidenceByKeys(ev, f.EvidenceKeys),
 	}
+	if f.Xinchuang {
+		c.Notes = append(c.Notes, fmt.Sprintf("信创判定分 %d/100", f.Score))
+	}
+	c.Notes = append(c.Notes, f.Notes...)
 	// 只回显短值（架构名、GPU 串），UA 整条已经在原始证据里，摘要行不放。
 	var short []string
 	for _, v := range f.Values {
@@ -225,12 +253,6 @@ func cardOf(f Finding, ev []Evidence) Card {
 	}
 	if len(short) > 0 {
 		c.Detail = strings.Join(short, "、")
-	}
-	if f.Xinchuang {
-		if c.Detail != "" {
-			c.Detail += " · "
-		}
-		c.Detail += fmt.Sprintf("信创判定分 %d/100", f.Score)
 	}
 	return c
 }
@@ -247,7 +269,7 @@ func browserCards(b BrowserFacts) []Card {
 		{Key: "timezone", Title: "时区", Value: b.Timezone},
 		{Key: "model", Title: "机型", Value: b.Model},
 		{Key: "platformV", Title: "系统版本", Value: b.PlatformVersion},
-		{Key: "gpuRaw", Title: "GPU", Value: b.GPU},
+		{Key: "gpuRaw", Title: "GPU 原始串", Value: b.GPU},
 		{Key: "hints", Title: "Client Hints", Value: b.HintsSource},
 	}
 }
@@ -261,6 +283,7 @@ func geoCards(res Result) []Card {
 		}
 		out = append(out, Card{
 			Key: "geo", Title: "归属 · " + g.Key, Value: g.Value,
+			// 外呼来源必须留在最小视图里：这是隐私边界，不能等 ?detail=1 才说。
 			Detail: "来自外部接口 " + res.GeoProvider,
 		})
 	}

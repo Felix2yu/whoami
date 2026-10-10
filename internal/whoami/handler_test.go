@@ -4,13 +4,19 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
 
 func getPage(t *testing.T, ua string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	return getPagePath(t, "/", ua, headers)
+}
+
+func getPagePath(t *testing.T, path, ua string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, path, nil)
 	if ua != "" {
 		r.Header.Set("User-Agent", ua)
 	}
@@ -30,9 +36,15 @@ func TestIndexRendersXinchuangVerdict(t *testing.T) {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"信创终端", "龙芯 LoongArch", "确认", "原始证据", "loongarch64", "判定分 100"} {
+	for _, want := range []string{"是否信创", `<span class="v" title="是">是</span>`, "龙芯 LoongArch", "loongarch64"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("页面缺少 %q", want)
+		}
+	}
+	// 默认视图只有结果表：判定分、依据说明、边界提示与原始证据都要 ?detail=1 才给。
+	for _, absent := range []string{"判定分", "原始证据", "LoongArch 自研指令集", "仅服务端信号", "不作为准入依据"} {
+		if strings.Contains(body, absent) {
+			t.Errorf("最小视图不该出现 %q", absent)
 		}
 	}
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
@@ -40,6 +52,22 @@ func TestIndexRendersXinchuangVerdict(t *testing.T) {
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("页面不该被缓存：%q", got)
+	}
+}
+
+func TestDetailParamExpandsReasoning(t *testing.T) {
+	body := getPagePath(t, "/?detail=1", loongArchUA, nil).Body.String()
+	for _, want := range []string{"判定分 100/100", "原始证据", "header.user-agent", "仅服务端信号", "不作为准入依据"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("?detail=1 页面缺少 %q", want)
+		}
+	}
+	if !strings.Contains(body, "LoongArch") {
+		t.Errorf("?detail=1 应展开结论依据：%s", body)
+	}
+	// ?detail=0 必须回到最小视图，不能把「写了参数」一律当成开启。
+	if min := getPagePath(t, "/?detail=0", loongArchUA, nil).Body.String(); strings.Contains(min, "原始证据") {
+		t.Error("?detail=0 不该展开原始证据")
 	}
 }
 
@@ -54,33 +82,130 @@ func TestIndexShowsIPAndInternalMark(t *testing.T) {
 }
 
 func TestUnknownVerdictExplainsItself(t *testing.T) {
-	body := getPage(t, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36", nil).Body.String()
-	if !strings.Contains(body, "无法判定") {
-		t.Error("通用 UA 应给出「无法判定」")
+	// 通用 Linux x86_64：这才是真的判不出来（海光/兆芯与 Intel/AMD 无法区分）。
+	const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+	min := getPage(t, ua, nil).Body.String()
+	if !strings.Contains(min, `<span class="v" title="未知">未知</span>`) {
+		t.Error("判不出来的通用 UA 应给「未知」")
 	}
-	if !strings.Contains(body, "不等于不是信创") && !strings.Contains(body, "不代表机器不是信创") {
-		t.Error("无法判定时必须解释清楚边界")
+	if strings.Contains(min, "不代表机器不是信创") {
+		t.Error("最小视图不铺陈边界说明")
 	}
-	if strings.Contains(body, "非信创") &&
-		!strings.Contains(body, "不等于不是信创") && !strings.Contains(body, "不代表机器不是信创") {
-		t.Error("不得出现否定断言")
+	detail := getPagePath(t, "/?detail=1", ua, nil).Body.String()
+	if !strings.Contains(detail, "不等于不是信创") && !strings.Contains(detail, "不代表机器不是信创") {
+		t.Error("?detail=1 时无法判定必须解释清楚边界")
 	}
-	if !strings.Contains(body, "仅服务端信号") {
-		t.Error("未收到 JS 回报时应明示")
+	for _, body := range []string{min, detail} {
+		if strings.Contains(body, "非信创") &&
+			!strings.Contains(body, "不等于不是信创") && !strings.Contains(body, "不代表机器不是信创") {
+			t.Error("不得出现否定断言")
+		}
+	}
+	if !strings.Contains(detail, "仅服务端信号") {
+		t.Error("?detail=1 且未收到 JS 回报时应明示")
+	}
+}
+
+func TestForeignPlatformRendersDefiniteNegative(t *testing.T) {
+	const macUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+	body := getPage(t, macUA, nil).Body.String()
+	if !strings.Contains(body, `<span class="v" title="不是">不是</span>`) {
+		t.Errorf("macOS 应直接给「不是」：%s", body)
+	}
+	if strings.Contains(body, "未发现信创特征") {
+		t.Error("已经判定的事不该再挂「未发现特征」的兜底说明")
+	}
+}
+
+// rowLabelRe 只匹配行首标签：最小视图里没有嵌套表，第一个 </table> 就是结果表的结尾。
+var rowLabelRe = regexp.MustCompile(`<th>([^<]+)</th>`)
+
+func mainRowLabels(t *testing.T, body string) []string {
+	t.Helper()
+	start := strings.Index(body, `<table class="kv rows">`)
+	if start < 0 {
+		t.Fatalf("页面缺少结果表：%s", body)
+	}
+	end := strings.Index(body[start:], "</table>")
+	if end < 0 {
+		t.Fatal("结果表没有闭合")
+	}
+	var out []string
+	for _, m := range rowLabelRe.FindAllStringSubmatch(body[start:start+end], -1) {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+func TestRowsAreGroupedByRelevance(t *testing.T) {
+	const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	payload := `{"userAgent":"` + ua + `","platform":"macOS","platformVersion":"14.4.0","architecture":"arm64","bitness":"64",` +
+		`"cores":8,"memory":8,"timezone":"Asia/Shanghai","screen":{"width":1512,"height":982,"dpr":2},` +
+		`"gpu":{"vendor":"Apple","renderer":"Apple M2"}}`
+	labels := mainRowLabels(t, postReport(t, "/report", ua, payload).Body.String())
+
+	pos := func(name string) int {
+		t.Helper()
+		for i, l := range labels {
+			if l == name {
+				return i
+			}
+		}
+		t.Fatalf("缺少行 %q，实际 %v", name, labels)
+		return -1
+	}
+
+	if labels[0] != "是否信创" || labels[1] != "IP 地址" {
+		t.Errorf("结论与 IP 必须打头：%v", labels)
+	}
+	// 强关联的行必须相邻：系统家族↔系统版本（中间最多夹一个发行版）、
+	// CPU 架构↔核心数↔内存、GPU 结论↔GPU 原始串。
+	if d := pos("系统版本") - pos("系统家族"); d < 1 || d > 2 {
+		t.Errorf("系统家族与系统版本被拆开了：%v", labels)
+	}
+	if pos("逻辑核心数") != pos("CPU 架构")+1 || pos("设备内存") != pos("逻辑核心数")+1 {
+		t.Errorf("CPU 与容量类字段没有连着排：%v", labels)
+	}
+	if pos("时区") < pos("屏幕") {
+		t.Errorf("展示类字段的顺序不稳定：%v", labels)
+	}
+}
+
+// GPU 的结论行与 WebGL 原始串是一组，必须挨着；只有原始串时也不该把结论行挤到别处。
+func TestGPUConclusionSitsNextToRawString(t *testing.T) {
+	const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	payload := `{"userAgent":"` + ua + `","gpu":{"vendor":"Jingjia Micro","renderer":"JM910"}}`
+	labels := mainRowLabels(t, postReport(t, "/report", ua, payload).Body.String())
+
+	var gpu, raw = -1, -1
+	for i, l := range labels {
+		switch l {
+		case "GPU":
+			gpu = i
+		case "GPU 原始串":
+			raw = i
+		}
+	}
+	if gpu < 0 || raw != gpu+1 {
+		t.Errorf("GPU 两行应相邻：%v", labels)
+	}
+	if labels[0] != "是否信创" {
+		t.Errorf("结论行必须打头：%v", labels)
 	}
 }
 
 func TestEmptyFieldsRenderNoRow(t *testing.T) {
-	// curl 没有平台/架构/浏览器信息：这些卡片整行都不该出现，而不是排一行空的。
+	// curl 没有平台/架构/浏览器信息：这些行整行都不该出现，而不是排一行空的。
 	rec := getPage(t, "curl/8.4.0", nil)
 	body := rec.Body.String()
-	for _, absent := range []string{`<span class="k">CPU 架构</span>`, `<span class="k">发行版</span>`, `<span class="k">浏览器</span>`} {
+	for _, absent := range []string{`<th>CPU 架构</th>`, `<th>发行版</th>`, `<th>浏览器</th>`} {
 		if strings.Contains(body, absent) {
 			t.Errorf("空值不应占位：%s", absent)
 		}
 	}
-	if n := strings.Count(body, `<article class="card">`); n != 1 {
-		t.Errorf("卡片行数 = %d, want 1（只有 IP）\n%s", n, body)
+	// 只剩「是否信创」与「IP 地址」两行。
+	if n := strings.Count(body, "<tr>\n    <th>"); n != 2 {
+		t.Errorf("结果表行数 = %d, want 2\n%s", n, body)
 	}
 	if strings.Contains(body, `<td></td>`) {
 		t.Error("证据表里出现空单元格")
@@ -88,7 +213,9 @@ func TestEmptyFieldsRenderNoRow(t *testing.T) {
 }
 
 func TestEvidenceDetailsAreListed(t *testing.T) {
-	body := getPage(t, loongArchUA, map[string]string{"Accept-Language": "zh-CN,zh;q=0.9", "Referer": "http://127.0.0.1:9099/"}).Body.String()
+	body := getPagePath(t, "/?detail=1", loongArchUA, map[string]string{
+		"Accept-Language": "zh-CN,zh;q=0.9", "Referer": "http://127.0.0.1:9099/",
+	}).Body.String()
 	for _, want := range []string{"header.user-agent", "header.accept-language", "header.referer", "conn.remote_addr"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("原始证据缺少 %s", want)
@@ -171,19 +298,22 @@ func TestStaticRejectsMissingAndTraversal(t *testing.T) {
 	}
 }
 
-func TestBuildViewBannerAndStatus(t *testing.T) {
+func TestBuildViewVerdictRowAndStatus(t *testing.T) {
 	d := builtinDetector(t)
 	ss, ev := Collect(reqWith(map[string]string{"User-Agent": "Mozilla/5.0 (X11; UOS; Linux x86_64) Chrome/120"}))
 	res := d.Detect(ss, ev, IPInfo{IP: "1.2.3.4", Family: "ipv4", Source: "conn"})
 
 	v := BuildView(res)
-	if v.Banner.Status != "confirmed" || v.Banner.Title != "信创终端" {
-		t.Errorf("banner = %+v", v.Banner)
+	if len(v.Cards) == 0 || v.Cards[0].Key != KeyVerdict {
+		t.Fatalf("首行应是「是否信创」：%+v", v.Cards)
 	}
-	if !v.HasContent() {
-		t.Fatal("视图没有内容")
+	if got := v.Cards[0].Value; got != "是" {
+		t.Errorf("verdict = %q, want 是", got)
 	}
-	if len(v.Cards) == 0 || v.Cards[0].Key != "ip" {
+	if !strings.Contains(strings.Join(v.Cards[0].Notes, "|"), "判定分") {
+		t.Errorf("判定分应作为 detail 说明：%v", v.Cards[0].Notes)
+	}
+	if len(v.Cards) < 2 || v.Cards[1].Key != "ip" {
 		t.Errorf("cards = %+v", v.Cards)
 	}
 	for _, c := range append(v.Cards, v.Extras...) {
@@ -204,6 +334,29 @@ func TestBuildViewBannerAndStatus(t *testing.T) {
 	}
 }
 
+func TestVerdictCardCarriesReasonsAndLimits(t *testing.T) {
+	res := Result{Verdict: Verdict{
+		Status: "unknown", Reasons: []string{"未发现信创特征"}, Limits: []string{"没有 GPU 信号"},
+	}}
+	c := verdictCard(res)
+	if c.Value != "未知" {
+		t.Errorf("value = %q", c.Value)
+	}
+	joined := strings.Join(c.Notes, "|")
+	if !strings.Contains(joined, "未发现信创特征") || !strings.Contains(joined, "没有 GPU 信号") {
+		t.Errorf("notes = %v，理由与边界都要能展开", c.Notes)
+	}
+	if strings.Contains(joined, "判定分") {
+		t.Error("未知结论没有判定分可言，不该出现分数")
+	}
+
+	// excluded 同样是 0 分：说了「不是」再挂一个判定分 0/100 只会让人以为还有别的信息。
+	ex := verdictCard(Result{Verdict: Verdict{Status: "excluded", Reasons: []string{"macOS 不在信创目录内"}}})
+	if ex.Value != "不是" || strings.Contains(strings.Join(ex.Notes, "|"), "判定分") {
+		t.Errorf("excluded 行 = %+v", ex)
+	}
+}
+
 func TestCardDetailKeepsShortValuesOnly(t *testing.T) {
 	long := strings.Repeat("m", maxDetailValue+1)
 	fs := []Finding{{
@@ -218,8 +371,11 @@ func TestCardDetailKeepsShortValuesOnly(t *testing.T) {
 	if strings.Contains(cards[0].Detail, long) {
 		t.Errorf("摘要行回显了超长值：%q", cards[0].Detail)
 	}
-	if !strings.Contains(cards[0].Detail, "loongarch64") || !strings.Contains(cards[0].Detail, " · 信创判定分 100/100") {
-		t.Errorf("detail = %q，应有短值与分隔符", cards[0].Detail)
+	if cards[0].Detail != "loongarch64" {
+		t.Errorf("detail = %q，只应回显短值", cards[0].Detail)
+	}
+	if len(cards[0].Notes) == 0 || cards[0].Notes[0] != "信创判定分 100/100" {
+		t.Errorf("notes = %v，判定分应留给 ?detail=1", cards[0].Notes)
 	}
 }
 

@@ -35,8 +35,8 @@
 </div>
 
 <div class="case">
-  <h2>4. <code>sandbox</code> 不给 allow-scripts：JS 不执行，页面要显式说明只用了服务端信号</h2>
-  <iframe sandbox src="http://127.0.0.1:8080/" title="禁用脚本的嵌入"></iframe>
+  <h2>4. <code>sandbox</code> 不给 allow-scripts：JS 不执行，<code>?detail=1</code> 要显式说明只用了服务端信号</h2>
+  <iframe sandbox src="http://127.0.0.1:8080/?detail=1" title="禁用脚本的嵌入"></iframe>
 </div>
 
 <div class="case">
@@ -44,6 +44,11 @@
   <iframe src="http://127.0.0.1:8080/?embed=0"
           allow="ch-ua-arch; ch-ua-model; ch-ua-platform; ch-ua-platform-version; ch-ua-full-version-list"
           title="强制完整版式"></iframe>
+</div>
+
+<div class="case">
+  <h2>6. <code>?detail=1</code>：在结果表下面展开来源、判定分、边界说明与原始证据</h2>
+  <iframe src="http://127.0.0.1:8080/?detail=1" title="展开判定依据"></iframe>
 </div>
 
 <p>宿主监听 <code>whoami:height</code> 消息，按 <code>e.source</code> 匹配 iframe 自动调高度：

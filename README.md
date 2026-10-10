@@ -3,8 +3,11 @@
 一个零依赖的 Go 单进程服务：访客打开页面（或别的页面用 iframe 嵌它）就能看到自己的
 IP、操作系统、CPU 架构、浏览器、GPU 等信息，并尽可能判断这台机器**是不是信创终端 / 国产系统**。
 
-定位是**自助排查与终端盘点**，不是准入依据。所有结论都给到置信度和原始证据，
-页面不会输出「非信创」这种否定断言。
+定位是**自助排查与终端盘点**，不是准入依据。页面默认只有一张结果表（是否信创、IP 与所处网络、
+系统、架构、浏览器、GPU 各占一行），判定依据、置信度和原始证据都收在 `?detail=1` 里，
+完整结论任何时候都能从 `/api/whoami` 拿到。「是否信创」给四态短答：**是 / 疑似 / 不是 / 未知**——
+只有拿到确证信号才说「不是」（macOS、Windows 这类境外系统本身就不在信创目录内），
+判不出来的（国产 x86 与 Intel/AMD 无法区分）一律「未知」，不会硬给否定结论。
 
 ## 快速开始
 
@@ -83,8 +86,10 @@ docker run --rm -p 8080:8080 -v whoami-data:/data whoami
 
 - **自动紧凑版式**：请求带 `Sec-Fetch-Dest: iframe` 时页面自己切紧凑布局，宿主页面不用加参数。
   想手动控制就用 `?embed=1` / `?embed=0`。
+- **详略开关**：默认只有结果表，`?detail=1` 才展开每行的来源、判定分、边界说明与原始证据
+  （页脚那句免责也跟着它）。`?detail=0` 显式关掉，写了参数不等于开启。
 - **卡片开关**：`?hide=ip,cpu,evidence` 关掉某些行，`?only=cpu,browser` 只留某些行。
-  可用键见 `internal/whoami/framing.go` 的 `allCardKeys()`。
+  可用键见 `internal/whoami/framing.go` 的 `allCardKeys()`，其中 `verdict` 就是「是否信创」那一行。
   如果你暂时保留旧的 IP 检测 iframe，加 `?hide=ip` 就行。
 - **不设 `X-Frame-Options`，也不设 COEP/CORP**：后者会让跨源 iframe 直接白屏。
   要限制谁能嵌，配 `-frame-ancestors 'http://host:port'`。
@@ -93,11 +98,11 @@ docker run --rm -p 8080:8080 -v whoami-data:/data whoami
 - **自适应高度**：页面会向宿主 `postMessage({type:'whoami:height', height})`，
   宿主按 `e.source` 匹配到对应 iframe 后把 `style.height` 设成该值即可（见 `examples/embed-host.html`）。
 - 宿主页面如果给 iframe 加了 `sandbox` 但没给 `allow-scripts`，JS 不会执行；
-  页面会显式写「仅服务端信号，未做跨源交叉验证」，不会假装什么都没发生。
+  `?detail=1` 会显式写「仅服务端信号，未做跨源交叉验证」，不会假装什么都没发生。
 - 收紧过 `allow` 属性的话需要放行 Client Hints：
   `allow="ch-ua-arch; ch-ua-model; ch-ua-platform; ch-ua-platform-version; ch-ua-full-version-list"`。
 - 非 https（内网直连 IP 很常见）时浏览器可能不给高熵值，页面对应字段整行不渲染，
-  并在证据区说明 `js.hintsUnavailable`。
+  并在 `?detail=1` 的证据区说明 `js.hintsUnavailable`。
 - 不使用任何浏览器存储，所以第三方 iframe 的存储分区策略对它没有影响。
 
 跨源 iframe 的实测可以在本地起一个宿主页：
@@ -149,8 +154,18 @@ r("cpu-loongarch64", FieldArch, e("loongarch64", "loongarch"), "龙芯 LoongArch
 7. **天花板**：`Ceiling` 是「这类信号单独最多能说明到什么程度」。
    跨源一致**突破不了它**——两个来源都同意「这是 aarch64」，也只能证明架构，
    不能证明它是飞腾还是树莓派。
+8. **境外平台**：`Foreign` 标记「确证在信创目录之外」的系统家族。没有任何信创信号、
+   且境外系统证据 ≥80 时给 `excluded`（页面显示「不是」）；有信创信号时仍以信创信号为准
+   （奇安信浏览器也有 Windows 版，谁更硬交给打分，不由系统家族一票否决）。
+   安卓与鸿蒙**不给**否定结论：国产平板和鸿蒙兼容层同样报 Android。
 
-置信度阈值：`≥80 确认`、`≥40 疑似`、其余 `未知`。
+置信度阈值：`≥80 确认`、`≥40 疑似`、其余 `未知`；`excluded` 走上面第 8 条，不参与打分。
+
+### 行序
+
+结果表按 `view.go` 的 `rowOrder` 排：结论 → IP 与归属 → 系统家族/发行版/系统版本 →
+CPU 架构/核心数/内存 → GPU 结论/原始串 → 浏览器/内核/Client Hints → 机型/屏幕/时区。
+加新字段时在表里给个位次，否则它会落到最后而不是插进不相干的分组中间。
 
 已确认真实存在的 token 只有少数几个：统信 UA 里的 `UOS`、麒麟的 `Kylinbrowser`、
 奇安信的 `Qaxbrowser`，加上架构串 `loongarch64` / `sw_64` / `mips64`。
@@ -173,9 +188,9 @@ curl -s localhost:8080/api/rules | jq '.rules' > rules.json   # 先拿现成的�
 
 | 情况 | 后果 |
 | --- | --- |
-| 企业策略把 UA 冻结成通用 Chrome 串 | 判不出来，只能给「未知」 |
+| 企业策略把 UA 冻结成通用 Chrome 串 | Linux 上判不出来，只能给「未知」；串里带 Windows/macOS 的仍能定系统家族，给「不是」 |
 | 海光、兆芯的国产 x86 | **任何 HTTP 信号都无法与 Intel/AMD 区分**，这是方法本身的天花板 |
-| Safari 的精简 UA | 平台细节缺失，Apple 芯片连架构都不给 |
+| Safari 的精简 UA | 平台细节缺失，Apple 芯片连架构都不给（macOS 家族本身已足够判「不是」） |
 | 浏览器禁用 JS、iframe `sandbox` 缺 `allow-scripts` | 只有请求头信号 |
 | 非安全上下文（内网 http） | Client Hints 高熵值可能拿不到 |
 | WebGL 被禁用或屏蔽 unmasked 参数 | 没有 GPU 旁证；软件渲染（SwiftShader/llvmpipe）不算反证 |

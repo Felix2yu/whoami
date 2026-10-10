@@ -23,6 +23,7 @@ type DailyRow struct {
 	Visits    int64  `json:"visits"`
 	Confirmed int64  `json:"confirmed"`
 	Suspect   int64  `json:"suspect"`
+	Excluded  int64  `json:"excluded"`
 	Unknown   int64  `json:"unknown"`
 }
 
@@ -141,6 +142,8 @@ func (d *DailyRow) bucket(status string) {
 		d.Confirmed++
 	case "suspect":
 		d.Suspect++
+	case "excluded":
+		d.Excluded++
 	default:
 		d.Unknown++
 	}

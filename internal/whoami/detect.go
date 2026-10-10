@@ -73,7 +73,7 @@ func (d *Detector) MatchRules(ss Signals) []Finding {
 		}
 		out = append(out, Finding{
 			RuleIDs: []string{ru.ID}, Name: ru.Name, Domain: ru.Domain, Category: ru.Category,
-			Domestic: ru.Domestic, Xinchuang: ru.Xinchuang,
+			Domestic: ru.Domestic, Xinchuang: ru.Xinchuang, Foreign: ru.Foreign,
 			Sources: sources, Values: values, EvidenceKeys: keys,
 			Confidence: ru.Weight, Verified: ru.Verified,
 		})
@@ -167,6 +167,7 @@ func mergeFindings(raw []Finding, byID map[string]Rule) []Finding {
 		m.Notes = union(m.Notes, notesOf(f.RuleIDs, byID))
 		m.Domestic = m.Domestic || f.Domestic
 		m.Xinchuang = m.Xinchuang || f.Xinchuang
+		m.Foreign = m.Foreign || f.Foreign
 		m.Verified = m.Verified || f.Verified
 	}
 	return out
@@ -285,6 +286,14 @@ func buildVerdict(fs []Finding, ss Signals) Verdict {
 	}
 	v := Verdict{}
 	if len(xc) == 0 {
+		// 没有信创信号时先找「确证境外平台」的硬信号：macOS/Windows 足以说「不是」；
+		// 判不出来的才配 unknown（国产 x86 与 Intel/AMD 在 HTTP 信号上无法区分）。
+		if f := bestForeign(fs); f != nil {
+			v.Status = "excluded"
+			v.Reasons = []string{fmt.Sprintf("%s（%s）不在信创目录内：信创终端要跑国产操作系统，可以确定这台机器不是信创终端。",
+				f.Name, strings.Join(f.Sources, "+"))}
+			return v
+		}
 		v.Status = "unknown"
 		v.Reasons = []string{"未发现信创特征。注意这不代表机器不是信创：企业策略常把 UA 冻结成通用 Chrome 串，" +
 			"海光/兆芯的国产 x86 也无法从 HTTP 信号区分。"}
@@ -311,6 +320,22 @@ func buildVerdict(fs []Finding, ss Signals) Verdict {
 	}
 	v.Limits = append(v.Limits, genericLimits(ss, fs)...)
 	return v
+}
+
+// bestForeign 取证据强度最高的境外平台结论。低于确认阈值的不足以说「不是」——
+// 未验证的预留 token 命中一次就下否定结论，正是这套判定要避免的事。
+func bestForeign(fs []Finding) *Finding {
+	var best *Finding
+	for i := range fs {
+		f := &fs[i]
+		if !f.Foreign || f.Confidence < ConfidenceConfirmed {
+			continue
+		}
+		if best == nil || f.Confidence > best.Confidence {
+			best = f
+		}
+	}
+	return best
 }
 
 // genericLimits 说明本轮判定缺少的交叉验证。

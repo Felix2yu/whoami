@@ -56,7 +56,7 @@ body {
 .row .k { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .row .v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .headline { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.row .badge, .row .score, .row .copybtn { flex: 0 0 auto; white-space: nowrap; }
+.row .score { flex: 0 0 auto; white-space: nowrap; }
 
 /* 复制结论：实心描边小按钮，不抢结论本身的视觉权重 */
 .copybtn {
@@ -70,19 +70,6 @@ body {
 }
 .copybtn:hover { border-color: var(--ok); color: var(--ok); }
 
-.badge {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: var(--unknown-bg);
-  color: var(--unknown);
-}
-
-.badge.sm { margin-left: 6px; font-size: 11px; padding: 0 6px; }
-.b-confirmed { background: var(--ok-bg); color: var(--ok); }
-.b-suspect { background: var(--warn-bg); color: var(--warn); }
-.b-unknown { background: var(--unknown-bg); color: var(--unknown); }
-
 .score { font-size: 12px; color: var(--muted); }
 
 .banner {
@@ -94,14 +81,14 @@ body {
   background: var(--card);
 }
 
-.banner.b-confirmed { border-left-color: var(--ok); }
-.banner.b-suspect { border-left-color: var(--warn); }
 .banner .headline { font-size: 16px; }
 .banner p { margin: 6px 0 0; }
-.reason { margin: 0; }
-.caveat, .limit { color: var(--muted); font-size: 12px; }
+.b-unknown { background: var(--unknown-bg); color: var(--unknown); }
+.caveat { color: var(--muted); font-size: 12px; }
 
 main { display: block; }
+
+.actions { margin: 12px 0 0; }
 
 .card {
   border: 1px solid var(--line);
@@ -113,7 +100,7 @@ main { display: block; }
 
 .card .v { font-size: 15px; }
 .card p { margin: 4px 0 0; }
-.card .d, .card .src, .card .note { color: var(--muted); font-size: 12px; }
+.card .d { color: var(--muted); font-size: 12px; }
 
 details { margin-top: 6px; }
 summary { cursor: pointer; color: var(--muted); font-size: 12px; }
@@ -122,6 +109,13 @@ summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .kv th { width: 38%; text-align: left; vertical-align: top; color: var(--muted); font-weight: 400; }
 .kv th, .kv td { border-top: 1px solid var(--line); padding: 4px 0; word-break: break-all; }
 .kv td { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+/* 结果表：默认视图只有这一张表，一行一个事实，不做视觉分级。
+   用子选择器而不是后代，免得 ?detail=1 时行内嵌套的证据表也被套用。 */
+table.rows { margin-top: 0; }
+.rows > tbody > tr > th { width: 9em; }
+.rows > tbody > tr > td { font-size: 14px; }
+.rows > tbody > tr > td > p { margin: 2px 0 0; }
 
 .more {
   border: 1px solid var(--line);
@@ -159,7 +153,6 @@ footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
 body.compact { padding: 8px 8px 10px; max-width: none; }
 body.compact .head h1 { display: none; }
 body.compact .head { margin-bottom: 6px; }
-body.compact .banner, body.compact .card { padding: 8px 10px; margin-bottom: 6px; }
-body.compact .card .v { font-size: 14px; }
-body.compact .banner .headline { font-size: 15px; }
+body.compact .rows > tbody > tr > th { width: 7.5em; }
+body.compact .rows > tbody > tr > td { font-size: 13px; }
 body.compact footer { margin-top: 8px; }

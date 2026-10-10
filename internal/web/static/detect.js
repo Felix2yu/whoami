@@ -150,31 +150,26 @@
   // summaryText 从服务端渲染好的 DOM 组装纯文本结论，页面文案仍只有服务端一套。
   function summaryText() {
     var lines = [];
-    var b = document.querySelector('.banner');
-    if (b) {
-      var head = b.querySelector('.headline');
-      var badge = b.querySelector('.badge');
-      var score = b.querySelector('.score');
-      lines.push(
-        '信创结论：' + (head ? head.textContent : '') +
-        (badge ? '（' + badge.textContent + '）' : '') +
-        (score ? ' ' + score.textContent : '')
-      );
-      var reasons = b.querySelectorAll('.reason');
-      for (var i = 0; i < reasons.length; i++) {
-        lines.push('· ' + reasons[i].textContent);
+    var rows = document.querySelectorAll('main table.rows > tbody > tr');
+    for (var i = 0; i < rows.length; i++) {
+      var th = rows[i].children[0];
+      var td = rows[i].children[1];
+      if (!th || !td) continue;
+      var v = td.querySelector('.v');
+      var line = th.textContent + '：' + (v ? v.textContent : '');
+      var notes = [];
+      for (var j = 0; j < td.children.length; j++) {
+        var el = td.children[j];
+        // 行内说明是 span.muted，接在当前行尾；<p class="muted"> 是独立的一行理由。
+        if (el.tagName === 'P') notes.push(el.textContent);
+        else if (el.classList.contains('muted')) line += '　' + el.textContent;
       }
-    }
-    var cards = document.querySelectorAll('main .card');
-    for (var j = 0; j < cards.length; j++) {
-      var k = cards[j].querySelector('.k');
-      var v = cards[j].querySelector('.v');
-      if (!k || !v) continue;
-      var cb = cards[j].querySelector('.badge');
-      var line = k.textContent + '：' + v.textContent + (cb ? '（' + cb.textContent + '）' : '');
-      var d = cards[j].querySelector('.d');
-      if (d) line += '　' + d.textContent;
       lines.push(line);
+      lines = lines.concat(notes);
+    }
+    var status = document.querySelectorAll('main > p.muted');
+    for (var k = 0; k < status.length; k++) {
+      lines.push(status[k].textContent);
     }
     var foot = document.querySelector('footer .muted');
     if (foot) lines.push(foot.textContent);

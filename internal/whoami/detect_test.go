@@ -39,7 +39,7 @@ func TestVerdictCorpus(t *testing.T) {
 		if tc.topXc == "-" {
 			for _, f := range fs {
 				if f.Xinchuang && f.Score >= ConfidenceSuspect {
-					t.Errorf("%s: 期望 unknown，但出现信创结论 %s(%d)", tc.id, f.Name, f.Score)
+					t.Errorf("%s: 期望没有信创结论，但出现 %s(%d)", tc.id, f.Name, f.Score)
 				}
 			}
 			continue
@@ -221,16 +221,56 @@ func TestMacAndWindowsArmAreNotXinchuang(t *testing.T) {
 }
 
 func TestUnknownNeverClaimsNonXinchuang(t *testing.T) {
-	v, _ := verdictOf(t, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
+	// 通用 Linux x86_64：海光/兆芯与 Intel/AMD 在 HTTP 信号上无法区分，只能判不出，绝不能说「不是」。
+	v, _ := verdictOf(t, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
 	if v.Status != "unknown" {
 		t.Fatalf("status = %s", v.Status)
 	}
 	joined := strings.Join(v.Reasons, "|") + strings.Join(v.Limits, "|")
-	if strings.Contains(joined, "非信创") {
-		t.Errorf("不得输出否定断言：%s", joined)
+	if strings.Contains(joined, "不是信创终端") {
+		t.Errorf("判不出来不得输出否定断言：%s", joined)
 	}
 	if !strings.Contains(joined, "冻结") {
 		t.Errorf("unknown 要解释 UA 可能被策略冻结：%s", joined)
+	}
+}
+
+func TestForeignPlatformIsADefiniteNegative(t *testing.T) {
+	// macOS / Windows：信创终端的前提是跑国产操作系统，境外系统本身就是证据，
+	// 再报「未知」等于把能确定的事说成不确定。
+	for _, ua := range []string{
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+	} {
+		v, fs := verdictOf(t, ua)
+		if v.Status != "excluded" {
+			t.Errorf("status = %s，want excluded；%s", v.Status, findingsString(fs))
+			continue
+		}
+		if !strings.Contains(strings.Join(v.Reasons, "|"), "不是信创终端") {
+			t.Errorf("否定结论要写清楚：%v", v.Reasons)
+		}
+		if len(v.Limits) != 0 {
+			t.Errorf("已经判定的事不必再挂缺信号提示：%v", v.Limits)
+		}
+	}
+}
+
+func TestForeignYieldsToXinchuangEvidenceAndStaysQuietOnAndroid(t *testing.T) {
+	// 麒麟浏览器 + Windows：信创信号优先，仍是疑似，不能说「不是」——
+	// 奇安信浏览器本身也有 Windows 版，谁更硬要交给打分而不是系统家族。
+	v, _ := verdictOf(t, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124 QaxBrowser/1.0.0.20 Safari/537.36")
+	if v.Status != "suspect" {
+		t.Errorf("status = %s, want suspect", v.Status)
+	}
+	// 安卓与鸿蒙同理不给否定：国产平板和鸿蒙兼容层一样报 Android。
+	for _, ua := range []string{
+		"Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+		"Mozilla/5.0 (Phone; HarmonyOS 4.0) AppleWebKit/537.36 Chrome/114.0.0.0 Mobile Safari/537.36",
+	} {
+		if v, _ := verdictOf(t, ua); v.Status != "unknown" {
+			t.Errorf("%s: status = %s, want unknown", ua, v.Status)
+		}
 	}
 }
 

@@ -30,6 +30,10 @@ type Rule struct {
 
 	Domestic  bool `json:"domestic"`  // 国产
 	Xinchuang bool `json:"xinchuang"` // 属于信创范畴
+	// Foreign 是「确证在信创目录之外」的平台信号。信创终端的前提是跑国产操作系统，
+	// 所以 macOS/Windows 这类系统家族信号足以给出否定结论——
+	// 与「判不出来」的 unknown 是两件事，别混用。
+	Foreign bool `json:"foreign"`
 
 	Weight int `json:"weight"` // 单独命中时的基础分，用于页面展示证据强度
 	// Ceiling 是「信创判定分」的上限：单靠这条信号最多能把结论推到多可信，
@@ -61,6 +65,11 @@ func (ru Rule) cn() Rule {
 	return ru
 }
 
+func (ru Rule) foreign() Rule {
+	ru.Foreign = true
+	return ru
+}
+
 func (ru Rule) unverified() Rule {
 	ru.Verified = false
 	return ru
@@ -80,27 +89,35 @@ func BuiltinRules() []Rule {
 
 	var out []Rule
 
-	// --- 系统家族（FieldPlatform）：只回答「哪一类系统」，不参与信创判定 ---
+	// --- 系统家族（FieldPlatform）：境外桌面/服务器系统可以直接给出否定结论，
+	// 安卓与鸿蒙不给——国产平板和鸿蒙兼容层同样报 Android，判「不是」会误伤。
 	out = append(out,
 		r("plat-linux", FieldPlatform, e("linux"), "Linux", "系统家族", CatPlatform, 90, 0, "Linux 家族，具体发行版看下面的信号。"),
-		r("plat-windows", FieldPlatform, e("windows"), "Windows", "系统家族", CatPlatform, 90, 0, "").
+		r("plat-windows", FieldPlatform, e("windows"), "Windows", "系统家族", CatPlatform, 90, 0,
+			"信创终端要跑国产操作系统，Windows 不在目录内。").foreign().
 			suppress("cpu-aarch64"),
-		r("plat-macos", FieldPlatform, e("macos"), "macOS", "系统家族", CatPlatform, 90, 0, "Safari 的 UA 精简，Apple 芯片与 Intel 无法从 UA 区分。").
+		r("plat-macos", FieldPlatform, e("macos"), "macOS", "系统家族", CatPlatform, 90, 0,
+			"Safari 的 UA 精简，Apple 芯片与 Intel 无法从 UA 区分；但 macOS 本身就不在信创目录内。").foreign().
 			suppress("cpu-aarch64"),
 		r("plat-android", FieldPlatform, e("android"), "Android", "系统家族", CatPlatform, 90, 0, "安卓设备上报的 ARM 与信创无关。").
 			suppress("cpu-aarch64", "cpu-riscv64"),
-		r("plat-ios", FieldPlatform, e("ios"), "iOS/iPadOS", "系统家族", CatPlatform, 90, 0, "").
+		r("plat-ios", FieldPlatform, e("ios"), "iOS/iPadOS", "系统家族", CatPlatform, 90, 0,
+			"iOS/iPadOS 不在信创目录内。").foreign().
 			suppress("cpu-aarch64", "cpu-riscv64"),
-		r("plat-chromeos", FieldPlatform, e("chromeos"), "ChromeOS", "系统家族", CatPlatform, 90, 0, "").
+		r("plat-chromeos", FieldPlatform, e("chromeos"), "ChromeOS", "系统家族", CatPlatform, 90, 0,
+			"ChromeOS 不在信创目录内。").foreign().
 			suppress("cpu-aarch64"),
 		r("plat-harmonyos", FieldPlatform, e("harmonyos"), "HarmonyOS", "系统家族", CatPlatform, 90, 0, "国产移动系统，不属于信创 PC/服务器范畴。").
 			cn().suppress("cpu-aarch64", "cpu-riscv64"),
 		// BSD 与信创无关：其上的 ARM/RISC-V 一样不参与信创判定。
-		r("plat-freebsd", FieldPlatform, e("freebsd"), "FreeBSD", "系统家族", CatPlatform, 90, 0, "").
+		r("plat-freebsd", FieldPlatform, e("freebsd"), "FreeBSD", "系统家族", CatPlatform, 90, 0,
+			"FreeBSD 不在信创目录内。").foreign().
 			suppress("cpu-aarch64", "cpu-riscv64"),
-		r("plat-openbsd", FieldPlatform, e("openbsd"), "OpenBSD", "系统家族", CatPlatform, 90, 0, "").
+		r("plat-openbsd", FieldPlatform, e("openbsd"), "OpenBSD", "系统家族", CatPlatform, 90, 0,
+			"OpenBSD 不在信创目录内。").foreign().
 			suppress("cpu-aarch64", "cpu-riscv64"),
-		r("plat-netbsd", FieldPlatform, e("netbsd"), "NetBSD", "系统家族", CatPlatform, 90, 0, "").
+		r("plat-netbsd", FieldPlatform, e("netbsd"), "NetBSD", "系统家族", CatPlatform, 90, 0,
+			"NetBSD 不在信创目录内。").foreign().
 			suppress("cpu-aarch64", "cpu-riscv64"),
 	)
 

@@ -243,8 +243,16 @@ func TestServerRendersGeoWhenProviderEnabled(t *testing.T) {
 	if !strings.Contains(body, "归属 · city") || !strings.Contains(body, "上海") {
 		t.Errorf("页面缺少归属行：%s", body)
 	}
-	if !strings.Contains(body, "已把访客 IP 交给该接口") {
-		t.Error("必须明示外呼行为")
+	if !strings.Contains(body, "来自外部接口 test-provider") {
+		t.Error("最小视图也必须明示外呼行为")
+	}
+
+	rec = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/?detail=1", nil)
+	r.Header.Set("User-Agent", uaLoongArch)
+	s.ServeHTTP(rec, r)
+	if !strings.Contains(rec.Body.String(), "已把访客 IP 交给该接口") {
+		t.Error("?detail=1 应展开外呼的完整说明")
 	}
 
 	rec = httptest.NewRecorder()

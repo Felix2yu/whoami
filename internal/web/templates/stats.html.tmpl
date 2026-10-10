@@ -63,8 +63,8 @@
 <h2 class="section">近 30 天</h2>
 <section class="card">
   <table class="kv"><tbody>
-  <tr><th>日期</th><td>访问 / 确认 / 疑似 / 未知</td></tr>
-  {{range .Daily}}<tr><th>{{.Date}}</th><td>{{.Visits}} / {{.Confirmed}} / {{.Suspect}} / {{.Unknown}}</td></tr>{{end}}
+  <tr><th>日期</th><td>访问 / 确认 / 疑似 / 不是 / 未知</td></tr>
+  {{range .Daily}}<tr><th>{{.Date}}</th><td>{{.Visits}} / {{.Confirmed}} / {{.Suspect}} / {{.Excluded}} / {{.Unknown}}</td></tr>{{end}}
   </tbody></table>
 </section>
 {{end}}

@@ -169,15 +169,23 @@ func TestReportValuesAreEscapedInHTML(t *testing.T) {
 }
 
 func TestReportFragmentReusesServerRendering(t *testing.T) {
-	rec := postReport(t, "/report", uaLoongArch, `{"platform":"Linux","cores":16,"memory":8,"timezone":"Asia/Shanghai","screen":{"width":2560,"height":1440,"dpr":2}}`)
+	const payload = `{"platform":"Linux","cores":16,"memory":8,"timezone":"Asia/Shanghai","screen":{"width":2560,"height":1440,"dpr":2}}`
+	rec := postReport(t, "/report", uaLoongArch, payload)
 	body := rec.Body.String()
 	if strings.Contains(body, "<!doctype html>") {
 		t.Error("片段不该包含整页骨架")
 	}
-	for _, want := range []string{`<section class="banner b-confirmed">`, "龙芯 LoongArch", "逻辑核心数", "16", "2560×1440 @2x", "Asia/Shanghai", "已合并浏览器端回报"} {
+	for _, want := range []string{`<table class="kv rows">`, "龙芯 LoongArch", "逻辑核心数", "16", "2560×1440 @2x", "Asia/Shanghai"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("片段缺少 %q", want)
 		}
+	}
+	if strings.Contains(body, "已合并浏览器端回报") {
+		t.Error("最小片段不该带回报状态说明")
+	}
+	detail := postReport(t, "/report?detail=1", uaLoongArch, payload).Body.String()
+	if !strings.Contains(detail, "已合并浏览器端回报") {
+		t.Errorf("?detail=1 片段应说明回报的参与程度：%s", detail)
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("content-type = %q", ct)

@@ -104,6 +104,8 @@ type Finding struct {
 	Category  string   `json:"category"`
 	Domestic  bool     `json:"domestic"`
 	Xinchuang bool     `json:"xinchuang"`
+	// Foreign 说明这条结论指向信创目录之外的平台（macOS/Windows 等），足以给否定结论。
+	Foreign bool `json:"foreign"`
 
 	// Sources 是说出这件事的独立来源，len>1 即跨源一致。
 	Sources      []string `json:"sources"`
@@ -117,9 +119,9 @@ type Finding struct {
 	Verified   bool     `json:"verified"`
 }
 
-// Verdict 是对「这台机器是不是信创」的三态回答。
+// Verdict 是对「这台机器是不是信创」的回答。
 type Verdict struct {
-	Status  string   `json:"status"` // confirmed|suspect|unknown
+	Status  string   `json:"status"` // confirmed|suspect|excluded|unknown
 	Score   int      `json:"score"`
 	Reasons []string `json:"reasons"`
 	Limits  []string `json:"limits"`

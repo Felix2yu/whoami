@@ -50,6 +50,14 @@ func TestHideAndOnlyAreCardSwitches(t *testing.T) {
 		t.Fatalf("hide = %v", f.Hidden)
 	}
 
+	// 「是否信创」也是一行，开关口径与其它行一致。
+	if !framingOf(frameRequest("hide=verdict", nil)).Hidden[KeyVerdict] {
+		t.Error("hide=verdict 应关掉「是否信创」行")
+	}
+	if !framingOf(frameRequest("only=ip", nil)).Hidden[KeyVerdict] {
+		t.Error("only=ip 应连带关掉「是否信创」行")
+	}
+
 	// ?only=ip 时其余卡片全部不渲染，hide 仍可叠加。
 	f = framingOf(frameRequest("only=ip", nil))
 	for _, k := range allCardKeys() {
@@ -64,6 +72,31 @@ func TestHideAndOnlyAreCardSwitches(t *testing.T) {
 	f = framingOf(frameRequest("only=ip,cpu&hide=cpu", nil))
 	if f.Hidden["ip"] || !f.Hidden["cpu"] || !f.Hidden[CatBrowser] {
 		t.Fatalf("only+hide 组合异常：%v", f.Hidden)
+	}
+}
+
+func TestDetailSwitchParsesQuery(t *testing.T) {
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{"", false},
+		{"detail=1", true},
+		{"detail=TRUE", true},
+		{"detail=on", true},
+		{"detail=0", false},
+		{"detail=no", false},
+		{"detail", false},
+	}
+	for _, c := range cases {
+		f := framingOf(frameRequest(c.query, nil))
+		if got := f.Detail; got != c.want {
+			t.Errorf("?%s: detail = %v, want %v", c.query, got, c.want)
+		}
+	}
+	got := View{}.applyFraming(framingOf(frameRequest("detail=1", nil)))
+	if !got.Detail {
+		t.Error("applyFraming 应把 detail 落到视图上")
 	}
 }
 
@@ -165,11 +198,27 @@ func TestReportFragmentKeepsHideParam(t *testing.T) {
 	}
 
 	rec := postReport(t, "/report?hide=ip", ua, `{}`)
-	if strings.Contains(rec.Body.String(), `<span class="k">IP 地址</span>`) {
+	if strings.Contains(rec.Body.String(), `<th>IP 地址</th>`) {
 		t.Error("回报片段应遵守 ?hide=ip，IP 行整行消失")
 	}
 	if !strings.Contains(rec.Body.String(), "龙芯 LoongArch") {
 		t.Error("其它结论行不应受 hide=ip 影响")
+	}
+}
+
+// 回报片段替换整块结果，?detail=1 展开的依据与证据必须在替换后仍然在。
+func TestReportFragmentKeepsDetailParam(t *testing.T) {
+	const ua = "Mozilla/5.0 (X11; Linux loongarch64) Chrome/102"
+	if body := postReport(t, "/report", ua, `{}`).Body.String(); strings.Contains(body, "原始证据") {
+		t.Error("默认回报片段不该带原始证据")
+	}
+	body := postReport(t, "/report?detail=1", ua, `{}`).Body.String()
+	if !strings.Contains(body, "原始证据") || !strings.Contains(body, "判定分 100/100") {
+		t.Errorf("?detail=1 回报片段应展开依据：%s", body)
+	}
+	// detail 模式下的证据同样受 hide=evidence 约束。
+	if b := postReport(t, "/report?detail=1&hide=evidence", ua, `{}`).Body.String(); strings.Contains(b, "header.user-agent") {
+		t.Error("hide=evidence 应在 detail 模式下摘掉行内证据")
 	}
 }
 
@@ -185,6 +234,30 @@ func TestDetectJSPassesQueryToReport(t *testing.T) {
 	}
 }
 
+// 守卫根因：「复制结论」是从渲染好的 DOM 里读文本的，
+// 模板改了类名或表格结构，剪贴板内容会静默变成空串或重复值。
+func TestDetectJSSelectorsMatchTemplate(t *testing.T) {
+	js, err := web.Static.ReadFile("static/detect.js")
+	if err != nil {
+		t.Fatalf("read detect.js: %v", err)
+	}
+	tmpl, err := web.Static.ReadFile("templates/index.html.tmpl")
+	if err != nil {
+		t.Fatalf("read index.html.tmpl: %v", err)
+	}
+	page, fragment := string(js), string(tmpl)
+	for _, want := range []string{"main table.rows > tbody > tr", "'.v'", "muted"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("detect.js 缺少选择器 %s", want)
+		}
+	}
+	for _, want := range []string{`<table class="kv rows">`, `<span class="v"`, `<span class="muted">`} {
+		if !strings.Contains(fragment, want) {
+			t.Errorf("模板缺少 DOM 约定 %s", want)
+		}
+	}
+}
+
 func TestHideParamRemovesWholeRow(t *testing.T) {
 	const ua = "Mozilla/5.0 (X11; Linux loongarch64) Chrome/102"
 	if body := getPage(t, ua, nil).Body.String(); !strings.Contains(body, "IP 地址") {
@@ -193,7 +266,7 @@ func TestHideParamRemovesWholeRow(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	newTestServer(t).ServeHTTP(rec, frameRequest("hide=ip", map[string]string{"User-Agent": ua}))
-	if strings.Contains(rec.Body.String(), `<span class="k">IP 地址</span>`) {
+	if strings.Contains(rec.Body.String(), `<th>IP 地址</th>`) {
 		t.Error("hide=ip 后 IP 行应整行消失")
 	}
 	if !strings.Contains(rec.Body.String(), "龙芯 LoongArch") {
