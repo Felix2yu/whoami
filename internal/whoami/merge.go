@@ -53,6 +53,10 @@ type BrowserReport struct {
 	TouchPoints      int          `json:"touchPoints"`
 	UserAgent        string       `json:"userAgent"`
 	HintsUnavailable bool         `json:"hintsUnavailable"`
+	// NavigatorPlatform 是 navigator.platform 的原值。它不受安全上下文限制，
+	// 是 http 部署下唯一还能说出系统家族的浏览器字段——代价是它已被 W3C 标为
+	// 弃用，且安卓会报 Linux、iPadOS 桌面模式会报 MacIntel，采信规则见 signals。
+	NavigatorPlatform string `json:"navigatorPlatform"`
 }
 
 // BrowserFacts 是页面上直接展示、但不参与规则匹配的客户端事实。
@@ -89,6 +93,7 @@ func (b *BrowserReport) sanitize() {
 	b.Bitness = clip(b.Bitness)
 	b.Model = clip(b.Model)
 	b.UserAgent = clip(b.UserAgent)
+	b.NavigatorPlatform = clip(b.NavigatorPlatform)
 	b.GPU.Vendor = clip(b.GPU.Vendor)
 	b.GPU.Renderer = clip(b.GPU.Renderer)
 	b.GPU.Error = clip(b.GPU.Error)
@@ -135,12 +140,24 @@ func clip(s string) string {
 }
 
 // signals 把回报变成可与请求头交叉验证的信号集。
-func (b BrowserReport) signals() (Signals, []Evidence) {
+// knownPlatforms 是请求头侧（UA 与 Sec-CH-UA-*）已经说出的系统家族，
+// 用来决定要不要采信 navigator.platform。
+func (b BrowserReport) signals(knownPlatforms []string) (Signals, []Evidence) {
 	var ss Signals
 	var ev []Evidence
+	var claimed []string
 	if p := normalizePlatform(b.Platform); p != "" {
 		ev = append(ev, truncateEvidence("js.platform", b.Platform, SourceJS))
 		ss = append(ss, Signal{Field: FieldPlatform, Value: p, Source: SourceJS, EvidenceKey: "js.platform"})
+		claimed = append(claimed, p)
+	}
+	claimed = append(claimed, knownPlatforms...)
+	if np := navigatorPlatformFamily(b.NavigatorPlatform); np != "" {
+		ev = append(ev, truncateEvidence("js.navigatorPlatform", b.NavigatorPlatform, SourceJS))
+		// 没人说过系统家族时它来兜底；说过了就只在与它一致时追加为第二来源。
+		if len(claimed) == 0 || containsStr(claimed, np) {
+			ss = append(ss, Signal{Field: FieldPlatform, Value: np, Source: SourceJS, EvidenceKey: "js.navigatorPlatform"})
+		}
 	}
 	if a := normalizeArch(b.Architecture, b.Bitness); a != "" {
 		ev = append(ev, truncateEvidence("js.architecture", b.Architecture+"/"+b.Bitness, SourceJS))
@@ -258,6 +275,24 @@ func normalizePlatform(p string) string {
 		return ""
 	}
 	return key
+}
+
+// navigatorPlatformFamily 把 navigator.platform 的老式词表归到系统家族。
+// 只认能确定的前缀，认不出的（BlackBerry 之类）一律不产出信号：
+// 这个字段是来补 UA 盲区的，不能反过来给它编一个家族。
+func navigatorPlatformFamily(p string) string {
+	k := strings.ToLower(strings.TrimSpace(p))
+	switch {
+	case strings.HasPrefix(k, "mac"):
+		return "macos"
+	case strings.HasPrefix(k, "win"):
+		return "windows"
+	case strings.HasPrefix(k, "linux"):
+		return "linux"
+	case strings.HasPrefix(k, "iphone"), strings.HasPrefix(k, "ipad"), strings.HasPrefix(k, "ipod"):
+		return "ios"
+	}
+	return ""
 }
 
 // normalizeArch 把 Client Hints 的 architecture+bitness 还原成与 UA 同一套词表，

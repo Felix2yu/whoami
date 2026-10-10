@@ -292,7 +292,7 @@ func (s *Server) detectWithReport(w http.ResponseWriter, r *http.Request) (Resul
 		return Result{}, err
 	}
 	ss, ev, ip := s.collect(r)
-	jsSignals, jsEvidence := rep.signals()
+	jsSignals, jsEvidence := rep.signals(ss.Values(FieldPlatform))
 	res := s.detector.Detect(append(ss, jsSignals...), append(ev, jsEvidence...), ip)
 	res.ID = NewID()
 	res.Browser = rep.facts()

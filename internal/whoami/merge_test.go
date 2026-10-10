@@ -168,6 +168,74 @@ func TestReportValuesAreEscapedInHTML(t *testing.T) {
 	}
 }
 
+// http 部署下 Client Hints 整个不存在，系统家族只能靠 navigator.platform 补。
+func TestNavigatorPlatformFillsFrozenUA(t *testing.T) {
+	rec := postReport(t, "/api/whoami", "CorporateBrowser/1.0", `{"navigatorPlatform":"Win32"}`)
+	var res Result
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v\n%s", err, rec.Body)
+	}
+	if got := bestName(res.Findings, CatPlatform); got != "Windows" {
+		t.Fatalf("系统家族 = %q, want Windows", got)
+	}
+	if res.Verdict.Status != "excluded" {
+		t.Errorf("verdict = %+v, want excluded", res.Verdict)
+	}
+}
+
+func TestNavigatorPlatformAgreesAndYields(t *testing.T) {
+	decode := func(t *testing.T, body string) Result {
+		t.Helper()
+		var res Result
+		if err := json.Unmarshal([]byte(body), &res); err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	platformOf := func(res Result) *Finding {
+		for i := range res.Findings {
+			if res.Findings[i].Category == CatPlatform {
+				return &res.Findings[i]
+			}
+		}
+		return nil
+	}
+	hasEvidence := func(res Result, key string) bool {
+		for _, e := range res.Evidence {
+			if e.Key == key {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 与 UA 一致：作为第二个来源参与交叉验证。
+	res := decode(t, postReport(t, "/api/whoami",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+		`{"navigatorPlatform":"MacIntel"}`).Body.String())
+	plat := platformOf(res)
+	if plat == nil || !containsStr(plat.Sources, SourceHeader) || !containsStr(plat.Sources, SourceJS) {
+		t.Fatalf("系统家族应跨 header+js 两个来源：%+v", plat)
+	}
+
+	// 与 UA 矛盾：安卓的 navigator.platform 会伪装成 Linux，必须让位给 UA。
+	res = decode(t, postReport(t, "/api/whoami",
+		"Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+		`{"navigatorPlatform":"Linux armv7l"}`).Body.String())
+	if plat = platformOf(res); plat == nil || plat.Name != "Android" {
+		t.Fatalf("系统家族应仍是 Android：%+v", plat)
+	}
+	for _, f := range res.Findings {
+		if f.Category == CatPlatform && f.Name == "Linux" {
+			t.Error("矛盾时不该再产出第二个系统家族")
+		}
+	}
+	// 原值仍要留在证据里：排查时看得见浏览器到底说了什么。
+	if !hasEvidence(res, "js.navigatorPlatform") {
+		t.Error("被晾一边不等于当作没发生，证据里要留 js.navigatorPlatform")
+	}
+}
+
 func TestReportFragmentReusesServerRendering(t *testing.T) {
 	const payload = `{"platform":"Linux","cores":16,"memory":8,"timezone":"Asia/Shanghai","screen":{"width":2560,"height":1440,"dpr":2}}`
 	rec := postReport(t, "/report", uaLoongArch, payload)

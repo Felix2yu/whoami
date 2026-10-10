@@ -71,6 +71,7 @@ func fuzzBrands(ua string) string {
 // FuzzBrowserReport 覆盖回报解析：任意 body 都不能 panic，也不能产出越界的值。
 func FuzzBrowserReport(f *testing.F) {
 	f.Add(`{"platform":"Linux"}`)
+	f.Add(`{"navigatorPlatform":"MacIntel"}`)
 	f.Add(`{"gpu":{"renderer":"` + strings.Repeat("A", 200) + `"}}`)
 	f.Add(`{"cores":99999,"memory":-1}`)
 	f.Add(`{"model":"<script>alert(1)</script>"}`)
@@ -96,9 +97,13 @@ func FuzzBrowserReport(f *testing.F) {
 		if rep.Cores > 1024 || rep.Memory > 1024 {
 			t.Fatalf("数值未夹紧：%+v", rep)
 		}
-		ss, ev := rep.signals()
-		res := det(t).Detect(ss, ev, IPInfo{IP: "1.1.1.1", Family: "ipv4", Source: "conn"})
-		res.Browser = rep.facts()
-		BuildView(res)
+		// 跑两遍：请求头没说系统家族时 navigator.platform 来兜底，
+		// 已经说了安卓时它必须闭嘴（否则 Linux 会把 Android 挤掉）。
+		for _, known := range [][]string{nil, {"android"}} {
+			ss, ev := rep.signals(known)
+			res := det(t).Detect(ss, ev, IPInfo{IP: "1.1.1.1", Family: "ipv4", Source: "conn"})
+			res.Browser = rep.facts()
+			BuildView(res)
+		}
 	})
 }

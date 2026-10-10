@@ -76,6 +76,8 @@
     body.brands = hints.brands || [];
     body.gpu = readGPU();
     body.userAgent = navigator.userAgent || '';
+    // navigator.platform 不受安全上下文限制，是 http 部署下唯一还能说出系统家族的字段。
+    body.navigatorPlatform = navigator.platform || '';
     body.languages = langs.slice(0, 16);
     body.timezone = tz;
     body.screen = screen;

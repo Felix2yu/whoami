@@ -105,6 +105,10 @@ docker run --rm -p 8080:8080 -v whoami-data:/data whoami
   并在 `?detail=1` 的证据区说明 `js.hintsUnavailable`。
   受这个限制的是 `设备内存`、`系统版本`、CH 的 `architecture`/`model`；
   **不受影响的**有 WebGL 显卡串、逻辑核心数、屏幕、时区、语言——所以 http 下也照样能判「不是」。
+- `navigator.platform` 也不受安全上下文限制，被采作**系统家族的兜底来源**（`MacIntel`→macOS、
+  `Win32`→windows、`Linux x86_64`→linux、`iPhone`→ios）。采信条件是「没人说过系统家族」
+  或「说的正是它」：安卓 Chrome 报 Linux、iPadOS 桌面模式报 MacIntel，矛盾时一律让位给 UA，
+  但原值仍留在 `js.navigatorPlatform` 证据里。这个字段已被 W3C 标为弃用，只当旁证用。
 - 不使用任何浏览器存储，所以第三方 iframe 的存储分区策略对它没有影响。
 
 跨源 iframe 的实测可以在本地起一个宿主页：
