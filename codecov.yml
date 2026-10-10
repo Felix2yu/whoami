@@ -1,0 +1,38 @@
+# Codecov 统一配置 —— 规范由 Felix2yu/.github 维护，各仓库仅 paths 不同。
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 1
+  round: down
+  status:
+    project:
+      default:
+        target: auto          # 存量基线：避免历史欠账一次性打红所有 PR
+        threshold: 1%
+        informational: true   # 稳定后再去掉 informational，转为硬门禁
+    patch:
+      default:
+        target: 80%           # 新增代码必须基本被测到
+        threshold: 5%
+
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: true
+
+ignore:
+  - "**/*_test.go"
+  - "cmd/**"            # 只有 flag/env 装配，无分支逻辑，测它等于测 flag 包
+  - "docs/**"
+  - "scripts/**"
+  - "data/**"
+  - "examples/**"
+
+flags:
+  backend:
+    paths:
+      # 根目录与子目录都要覆盖：coverage 路径经 path-fix 后为仓库相对路径，
+      # 仅写 '**/*.go' 匹配不到无目录层级的文件会导致 flag 归属 0 文件被丢弃。
+      - '*.go'
+      - '**/*.go'
+    carryforward: true

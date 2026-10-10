@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# whoami 是零第三方依赖的纯 stdlib 服务，页面资源通过 go:embed 打进二进制，
+# 所以这里没有 web-dir / frontend-stage-command：仓库里没有需要 Node 构建的前端。
+# 工具链版本一律由 reusable 流程读 go.mod，不在本文件写死。
+jobs:
+  test:
+    uses: Felix2yu/.github/.github/workflows/reusable-test.yml@v1
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    with:
+      go-dir: .
+      test-packages: ./...
+      # 判定链与统计/日志都要求并发安全，-race 常驻；covermode 与模板默认保持一致。
+      test-flags: -race -covermode=atomic
+
+  image:
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: Felix2yu/.github/.github/workflows/reusable-image.yml@v1
+    with:
+      go-dir: .
+      main-package: ./cmd/whoami
+      binary-name: whoami
+      image-name: ghcr.io/felix2yu/whoami
+      # 纯 stdlib、没有 //go:linkname 到 libc 的可选绑定，off 分支就是真静态。
+      cgo: off
+
+  release:
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    uses: Felix2yu/.github/.github/workflows/reusable-release.yml@v1
+    with:
+      go-dir: .
+      main-package: ./cmd/whoami
+      binary-name: whoami
+      cgo: off
