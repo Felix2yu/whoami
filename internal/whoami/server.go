@@ -238,6 +238,12 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("ok\n"))
 }
 
+// handleServerInfo 返回服务进程自身的身份信息（主机名/OS/架构/Go 版本/构建信息）。
+// 与 /healthz 同口径：开放、无鉴权、不加 CSP 类安全头。
+func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.ServerInfo())
+}
+
 // HTTPServer 把超时配置落到 http.Server 上。
 func (s *Server) HTTPServer() *http.Server {
 	return &http.Server{

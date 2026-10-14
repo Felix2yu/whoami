@@ -381,6 +381,7 @@ func TestServerEndToEndLogAndStats(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("User-Agent", ua)
+	r.Header.Set("Accept", "text/html")
 	s.ServeHTTP(rec, r)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("index = %d", rec.Code)

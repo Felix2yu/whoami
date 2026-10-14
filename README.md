@@ -69,7 +69,7 @@ docker run --rm -p 8080:8080 -v whoami-data:/data whoami
 
 | 路径 | 说明 |
 | --- | --- |
-| `GET /` | 检测页 |
+| `GET /` | 检测页（浏览器）。请求 `Accept` 不含 `text/html` 时（如服务器上 `curl`，默认 `*/*`），改返回**服务器自身身份 JSON**（主机名 / OS / 架构 / Go 版本 / 构建信息），开放、无鉴权 |
 | `GET /api/whoami` | 纯服务端信号的 JSON 结论 |
 | `POST /api/whoami` | 接收浏览器端回报，返回合并后的 JSON 结论 |
 | `POST /report` | 接收同一份回报，返回渲染好的 HTML 片段（页面的 JS 用它） |

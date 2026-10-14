@@ -9,6 +9,9 @@ import (
 
 func reqWith(headers map[string]string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	if _, ok := headers["Accept"]; !ok {
+		r.Header.Set("Accept", "text/html")
+	}
 	for k, v := range headers {
 		r.Header.Set(k, v)
 	}

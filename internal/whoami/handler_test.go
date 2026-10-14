@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -14,11 +16,60 @@ func getPage(t *testing.T, ua string, headers map[string]string) *httptest.Respo
 	return getPagePath(t, "/", ua, headers)
 }
 
+func TestServerInfoIsServerIdentityNotClient(t *testing.T) {
+	// 服务器调用（curl 默认 Accept */*，不含 text/html）→ 根路径返回服务器身份 JSON。
+	rec := getPagePath(t, "/", "", map[string]string{"Accept": "application/json"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("content-type = %q", ct)
+	}
+
+	var info ServerInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatalf("响应不是合法 JSON: %v body=%s", err, rec.Body.String())
+	}
+	if info.OS != runtime.GOOS {
+		t.Errorf("os = %q, want %q", info.OS, runtime.GOOS)
+	}
+	if info.Arch != runtime.GOARCH {
+		t.Errorf("arch = %q, want %q", info.Arch, runtime.GOARCH)
+	}
+	if want, err := os.Hostname(); err == nil && info.Hostname != want {
+		t.Errorf("hostname = %q, want %q", info.Hostname, want)
+	}
+	// 开放口径：不应带 CSP 类安全头（与 /healthz 一致）。
+	if got := rec.Header().Get("Content-Security-Policy"); got != "" {
+		t.Errorf("/ 的 JSON 分支不该设 CSP：%q", got)
+	}
+}
+
+func TestIndexServesHTMLToBrowser(t *testing.T) {
+	// 浏览器（Accept 含 text/html）→ 根路径仍返回访客检测页，行为不变。
+	rec := getPagePath(t, "/", "", map[string]string{"Accept": "text/html"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("content-type = %q", ct)
+	}
+	// 页面应仍含信创判定表，证明访客检测逻辑未被内容协商破坏。
+	if !strings.Contains(rec.Body.String(), "是否信创") {
+		t.Errorf("访客检测页缺少「是否信创」")
+	}
+}
+
 func getPagePath(t *testing.T, path, ua string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, path, nil)
 	if ua != "" {
 		r.Header.Set("User-Agent", ua)
+	}
+	// 真实浏览器总在 Accept 里带 text/html；测试默认也带，避免被内容协商判成 JSON 分支。
+	// 需要 JSON 的调用（如服务器身份测试）显式传 Accept: application/json 即可覆盖。
+	if _, ok := headers["Accept"]; !ok {
+		r.Header.Set("Accept", "text/html")
 	}
 	for k, v := range headers {
 		r.Header.Set(k, v)

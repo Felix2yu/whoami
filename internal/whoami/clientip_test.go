@@ -11,6 +11,9 @@ import (
 func ipRequest(remoteAddr string, headers map[string]string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = remoteAddr
+	if _, ok := headers["Accept"]; !ok {
+		r.Header.Set("Accept", "text/html")
+	}
 	for k, v := range headers {
 		r.Header.Set(k, v)
 	}

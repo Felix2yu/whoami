@@ -184,6 +184,12 @@ func (l *rateLimiter) allow(key string, now time.Time) bool {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	// 内容协商：浏览器（Accept 含 text/html）看检测页；服务器调用（curl 等，Accept 不含
+	// text/html，如 */* 或 application/json）直接返回服务器自身身份 JSON，无需独立路径。
+	if !wantsHTML(r) {
+		s.handleServerInfo(w, r)
+		return
+	}
 	res := s.detectRequest(r)
 	s.record(KindPage, res)
 	view := BuildView(res).applyFraming(framingOf(r))
@@ -194,6 +200,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if err := s.tmpl.ExecuteTemplate(w, "index.html.tmpl", view); err != nil {
 		slog.Error("render index failed", "err", err, "id", res.ID)
 	}
+}
+
+// wantsHTML 判断请求是否想要 HTML 页面。浏览器几乎总在 Accept 里带 text/html；
+// curl 默认发 */*，显式带 application/json 的调用也走 JSON 分支。
+func wantsHTML(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {

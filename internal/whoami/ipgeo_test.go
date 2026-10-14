@@ -234,6 +234,7 @@ func TestServerRendersGeoWhenProviderEnabled(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("User-Agent", uaLoongArch)
+	r.Header.Set("Accept", "text/html")
 	s.ServeHTTP(rec, r)
 	body := rec.Body.String()
 
@@ -250,6 +251,7 @@ func TestServerRendersGeoWhenProviderEnabled(t *testing.T) {
 	rec = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/?detail=1", nil)
 	r.Header.Set("User-Agent", uaLoongArch)
+	r.Header.Set("Accept", "text/html")
 	s.ServeHTTP(rec, r)
 	if !strings.Contains(rec.Body.String(), "已把访客 IP 交给该接口") {
 		t.Error("?detail=1 应展开外呼的完整说明")
@@ -258,6 +260,7 @@ func TestServerRendersGeoWhenProviderEnabled(t *testing.T) {
 	rec = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/?hide=geo", nil)
 	r.Header.Set("User-Agent", uaLoongArch)
+	r.Header.Set("Accept", "text/html")
 	s.ServeHTTP(rec, r)
 	if strings.Contains(rec.Body.String(), "归属 · city") {
 		t.Error("hide=geo 应收起归属行")
