@@ -85,17 +85,6 @@ func containsStr(hay []string, needle string) bool {
 	return false
 }
 
-// removeSignalField 从信号集中剔除某字段，供回报合并时以新值覆盖旧派生值。
-func removeSignalField(ss Signals, field string) Signals {
-	out := ss[:0:0]
-	for _, s := range ss {
-		if s.Field != field {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
 // Finding 是一条规则（或若干条同结论规则合并后）的命中结果。
 type Finding struct {
 	RuleIDs   []string `json:"ruleIds"`

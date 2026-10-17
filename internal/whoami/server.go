@@ -84,7 +84,7 @@ type Server struct {
 	assets    map[string]staticAsset
 	log       *AccessLog
 	stats     *Stats
-	geo       IpInfoProvider
+	geo       IPInfoProvider
 	rulesFrom RulesSource
 	anonSalt  []byte
 	statsRL   *rateLimiter
@@ -149,7 +149,7 @@ func NewServer(cfg Config) (*Server, error) {
 		slog.Info("stats replayed", "records", n, "days", cfg.StatsReplayDays)
 	}
 
-	geo := IpInfoProvider(noopProvider{})
+	geo := IPInfoProvider(noopProvider{})
 	if cfg.GeoEndpoint != "" {
 		g := DefaultGeoConfig()
 		g.Endpoint = cfg.GeoEndpoint

@@ -26,10 +26,10 @@ type Geo []GeoValue
 // maxGeoValue 限制单个归属值的长度：接口返回的运营商名称可能很长。
 const maxGeoValue = 64
 
-// IpInfoProvider 是 IP 归属信息的可插拔来源。
+// IPInfoProvider 是 IP 归属信息的可插拔来源。
 // 你那个老的 IP 服务如果有 JSON 接口，实现这个接口接进来即可，
 // 判定与页面都不用改。
-type IpInfoProvider interface {
+type IPInfoProvider interface {
 	Name() string
 	Enabled() bool
 	Lookup(ctx context.Context, addr netip.Addr) (Geo, error)
@@ -226,7 +226,7 @@ func (p *httpGeoProvider) evictLocked(now time.Time) {
 }
 
 // lookupGeo 是唯一入口：未启用时零外呼，失败时静默降级并留一条警告。
-func lookupGeo(ctx context.Context, p IpInfoProvider, addr netip.Addr) (Geo, string) {
+func lookupGeo(ctx context.Context, p IPInfoProvider, addr netip.Addr) (Geo, string) {
 	if p == nil || !p.Enabled() || !addr.IsValid() {
 		return nil, ""
 	}

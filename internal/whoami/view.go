@@ -116,9 +116,7 @@ func BuildView(res Result) View {
 			v.Extras = append(v.Extras, c)
 		}
 	}
-	for _, c := range geoCards(res) {
-		v.Extras = append(v.Extras, c)
-	}
+	v.Extras = append(v.Extras, geoCards(res)...)
 
 	// JSStatus 按回报的实际参与程度分档陈述，避免过度承诺：
 	// 收到回报 ≠ 有可用于判定的字段 ≠ 结论真的被跨源印证过，三件事分开说。

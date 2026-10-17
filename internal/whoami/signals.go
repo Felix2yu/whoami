@@ -101,13 +101,6 @@ func Collect(r *http.Request) (Signals, []Evidence) {
 	return ss.signals, ss.evidence
 }
 
-func sourceForHeader(key string) string {
-	if strings.HasPrefix(key, "header.sec-ch-ua") {
-		return SourceCH
-	}
-	return SourceHeader
-}
-
 // normalizeHeaderValue 去掉 Client Hints 的引号并小写，便于规则表用不区分大小写的 token。
 func normalizeHeaderValue(v string) string {
 	return strings.ToLower(strings.Trim(strings.TrimSpace(v), `"`))
