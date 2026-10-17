@@ -248,3 +248,7 @@ go test ./internal/whoami -fuzz=FuzzBrowserReport -fuzztime=30s
 识别相关的关键语料在 `internal/whoami/testdata/`：`ua_cases.tsv` 断言命中哪些规则，
 `verdict_cases.tsv` 断言最终三态结论。加一条真机 UA 就往文件里加一行，
 不用改测试代码。
+
+## 许可证
+
+本项目以 [MIT](LICENSE) 发布，© 2026 Felix2yu。
