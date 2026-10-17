@@ -43,7 +43,7 @@ JSON 输出上限 1MiB。
 ## 容器
 
 ```bash
-./build.sh                      # 产出 bin/whoami（装配式镜像的二进制来源）
+./scripts/build.sh              # 产出 bin/whoami（装配式镜像的二进制来源）
 docker build -t whoami .        # 本机没有 docker 时这一步交给 CI
 docker run --rm -p 8080:8080 -v whoami-data:/data whoami
 ```
@@ -63,7 +63,7 @@ docker run --rm -p 8080:8080 -v whoami-data:/data whoami
 
 本地实测：`CGO_ENABLED=0 GOOS=linux go build` 产物 `file` 判定为 `ELF ... statically linked`、
 无 `PT_INTERP`，所以 CI 的 `cgo: off` 分支是真静态，装进 musl 不会 ENOENT。
-`build.sh` 里带同一条校验（本机没 `readelf` 时跳过并说明）。
+`scripts/build.sh` 里带同一条校验（本机没 `readelf` 时跳过并说明）。
 
 ## 端点
 

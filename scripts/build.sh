@@ -2,7 +2,8 @@
 # 产出 bin/whoami 供 Dockerfile COPY。零依赖、纯 stdlib，
 # CGO_ENABLED=0 在这里是真的静态（没有 //go:linkname 到 libc 的可选绑定）。
 set -e
-cd "$(dirname "$0")"
+# 脚本在 scripts/ 下，仓库根是其父目录（相对路径与 go build 包路径都以根为基准）
+cd "$(dirname "$0")/.."
 
 CGO_ENABLED=0 GOOS=linux go build -trimpath -o bin/whoami ./cmd/whoami
 
