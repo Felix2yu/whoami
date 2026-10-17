@@ -109,7 +109,9 @@ func TestExternalRuleOverridesBuiltinSameID(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, r)
 	var res Result
-	json.Unmarshal(rec.Body.Bytes(), &res)
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 
 	if res.Verdict.Status != "unknown" {
 		t.Errorf("覆盖天花板后应退出疑似区间：%+v", res.Verdict)

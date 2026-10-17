@@ -92,7 +92,9 @@ func TestSoftwareRendererIsNotEvidenceAgainstXinchuang(t *testing.T) {
 	rec := postReport(t, "/api/whoami", "Mozilla/5.0 (X11; Linux x86_64) Chrome/120",
 		`{"gpu":{"vendor":"Google Inc.","renderer":"Google SwiftShader"}}`)
 	var res Result
-	json.Unmarshal(rec.Body.Bytes(), &res)
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 	for _, f := range res.Findings {
 		if f.Category == CatGPU && f.Xinchuang {
 			t.Errorf("软件渲染被判成国产 GPU：%+v", f)
@@ -136,7 +138,9 @@ func TestReportRejectsOversizedBody(t *testing.T) {
 		t.Fatalf("4KB 回报应正常接收，status = %d", ok.Code)
 	}
 	var res Result
-	json.Unmarshal(ok.Body.Bytes(), &res)
+	if err := json.Unmarshal(ok.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 	// 超长的单个字段在入口就被削到 maxReportString，证据与匹配都用削后的值，
 	// 页面和日志不可能被一条 4KB 的厂商串撑爆。
 	found := false

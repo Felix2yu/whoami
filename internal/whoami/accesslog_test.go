@@ -431,7 +431,9 @@ func TestServerEndToEndLogAndStats(t *testing.T) {
 	rec = httptest.NewRecorder()
 	s2.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/stats", nil))
 	var v2 StatsView
-	json.Unmarshal(rec.Body.Bytes(), &v2)
+	if err := json.Unmarshal(rec.Body.Bytes(), &v2); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 	if v2.Visits != 1 || v2.Reports != 1 {
 		t.Errorf("重启后 stats = %+v", v2)
 	}
