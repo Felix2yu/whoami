@@ -11,11 +11,13 @@ const KeyVerdict = "verdict"
 
 // Card 是结果表里的一行。最小视图只渲染 Title 与 Value（外加短值 Detail）；
 // Sources / Notes / Evidence 是判定材料，只有 ?detail=1 才展开。Value 为空的行不会被构建。
+// Accent 标记「这一行的值就是页面主读对象」，渲染时加粗标红，供信息多的行里一眼定位。
 type Card struct {
 	Key      string
 	Title    string
 	Value    string
 	Detail   string
+	Accent   bool
 	Sources  []string
 	Notes    []string
 	Evidence []Evidence
@@ -24,8 +26,8 @@ type Card struct {
 // View 是模板渲染所需的全部内容。
 type View struct {
 	Result Result
-	// Cards 是判定行（「是否信创」打头，其后是 IP 与各类别结论），Extras 是展示行，
-	// 两组合并成页面上的同一张表，见 Rows。
+	// Cards 是判定行（「是否信创」、IP 与各类别结论），Extras 是展示行，
+	// 两组合并成页面上的同一张表；页面上下次序只由 Rows 的 rowOrder 决定。
 	Cards    []Card
 	Extras   []Card
 	Evidence []Evidence
@@ -49,13 +51,13 @@ func (v View) Rows() []Card {
 	return rows
 }
 
-// rowOrder 是行序表：结论 → 网络与归属 → 系统 → CPU 与内存 → GPU → 浏览器 → 其它展示。
+// rowOrder 是行序表：IP → 结论 → 归属 → 系统 → CPU 与内存 → 浏览器 → 其它展示。
+// IP 打头因为它是一行里读得最快、也最常要被复述出去的事实；结论紧随其后。
 var rowOrder = map[string]int{
-	KeyVerdict: 0,
-	"ip":       10, "geo": 11,
+	"ip": 0, KeyVerdict: 1,
+	"geo":       11,
 	CatPlatform: 20, CatOS: 21, "platformV": 22,
 	CatCPU: 30, "cores": 31, "memory": 32,
-	CatGPU: 40, "gpuRaw": 41,
 	CatBrowser: 50, CatEngine: 51, "hints": 52,
 	"model": 60, "screen": 61, "timezone": 62,
 }
@@ -167,27 +169,35 @@ func ipCard(res Result, ev []Evidence) Card {
 		return c
 	}
 	c.Value = res.Client.IP
+	c.Accent = true
 
+	// 行内只留读地址要用得上的两句：归属、是不是内网。地址族肉眼分得出，
+	// 取自哪个头属于方法学，两条一起留给 ?detail=1。
 	var bits []string
-	if res.Client.Family != "" {
-		bits = append(bits, strings.ToUpper(res.Client.Family))
+	if res.Client.Label != "" {
+		bits = append(bits, "归属："+res.Client.Label)
 	}
 	if res.Client.Internal {
 		bits = append(bits, "内网/保留地址")
 	}
+	c.Detail = strings.Join(bits, " · ")
+
+	var why []string
+	if res.Client.Family != "" {
+		why = append(why, strings.ToUpper(res.Client.Family))
+	}
 	switch res.Client.Source {
 	case "conn":
-		bits = append(bits, "连接层 RemoteAddr")
+		why = append(why, "连接层 RemoteAddr")
 	case "x-forwarded-for":
-		bits = append(bits, "受信代理转发的 X-Forwarded-For")
+		why = append(why, "受信代理转发的 X-Forwarded-For")
 	case "x-real-ip":
-		bits = append(bits, "受信代理转发的 X-Real-IP")
+		why = append(why, "受信代理转发的 X-Real-IP")
 	case "forwarded":
-		bits = append(bits, "受信代理转发的 Forwarded")
+		why = append(why, "受信代理转发的 Forwarded")
 	}
-	c.Detail = strings.Join(bits, " · ")
-	if res.Client.Label != "" {
-		c.Value += "（归属：" + res.Client.Label + "）"
+	if len(why) > 0 {
+		c.Notes = append(c.Notes, "地址族与来源："+strings.Join(why, " · "))
 	}
 	if res.Client.Note != "" {
 		c.Notes = append(c.Notes, res.Client.Note)
@@ -202,7 +212,12 @@ func ipCard(res Result, ev []Evidence) Card {
 	return c
 }
 
-var cardCategories = []string{CatOS, CatCPU, CatBrowser, CatGPU}
+// cardCategories 是每个类别出一行的判定类别。GPU 不在其中：WebGL 串动辄八九十字，
+// 它的结论又已经并进「是否信创」的判定分里，所以只参与判定、整页都不展示。
+var cardCategories = []string{CatOS, CatCPU, CatBrowser}
+
+// undisplayed 是只进判定管线、不上结果表的类别。
+var undisplayed = map[string]bool{CatGPU: true}
 
 // findingCards 每个类别出一行，取该类别证据强度最高的一条结论。
 func findingCards(fs []Finding, ev []Evidence) []Card {
@@ -220,7 +235,7 @@ func findingCards(fs []Finding, ev []Evidence) []Card {
 func extraCards(fs []Finding, ev []Evidence) []Card {
 	var out []Card
 	for _, f := range fs {
-		if containsStr(cardCategories, f.Category) {
+		if containsStr(cardCategories, f.Category) || undisplayed[f.Category] {
 			continue
 		}
 		if c := cardOf(f, ev); c.Value != "" {
@@ -259,6 +274,7 @@ func cardOf(f Finding, ev []Evidence) Card {
 const maxDetailValue = 48
 
 // browserCards 是纯展示事实：取到才成行，取不到整行不渲染，不留占位。
+// WebGL 串不在其中——GPU 只参与判定，见 cardCategories 上的说明。
 func browserCards(b BrowserFacts) []Card {
 	return []Card{
 		{Key: "cores", Title: "逻辑核心数", Value: intString(b.Cores)},
@@ -267,7 +283,6 @@ func browserCards(b BrowserFacts) []Card {
 		{Key: "timezone", Title: "时区", Value: b.Timezone},
 		{Key: "model", Title: "机型", Value: b.Model},
 		{Key: "platformV", Title: "系统版本", Value: b.PlatformVersion},
-		{Key: "gpuRaw", Title: "GPU 原始串", Value: b.GPU},
 		{Key: "hints", Title: "Client Hints", Value: b.HintsSource},
 	}
 }

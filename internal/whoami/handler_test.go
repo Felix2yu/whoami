@@ -124,11 +124,21 @@ func TestDetailParamExpandsReasoning(t *testing.T) {
 
 func TestIndexShowsIPAndInternalMark(t *testing.T) {
 	body := getPage(t, "Mozilla/5.0 (X11; Linux x86_64) Chrome/120", nil).Body.String()
-	if !strings.Contains(body, "192.0.2.1") {
-		t.Error("页面应显示访客 IP")
+	// 首行只留地址与归属：地址族肉眼分得出，来源属于方法学，两条都走 ?detail=1。
+	if !strings.Contains(body, `<td class="hot"><span class="v" title="192.0.2.1">192.0.2.1</span>`) {
+		t.Errorf("IP 值应带强调标记：%s", body)
 	}
-	if !strings.Contains(body, "IPV4") {
-		t.Errorf("应标注地址族：%s", body)
+	if n := strings.Count(body, `<td class="hot">`); n != 1 {
+		t.Errorf("强调标记应只落在 IP 行，实际 %d 处：%s", n, body)
+	}
+	for _, absent := range []string{"IPV4", "RemoteAddr"} {
+		if strings.Contains(body, absent) {
+			t.Errorf("最小视图的 IP 行不该有 %q：%s", absent, body)
+		}
+	}
+	detail := getPagePath(t, "/?detail=1", "Mozilla/5.0 (X11; Linux x86_64) Chrome/120", nil).Body.String()
+	if !strings.Contains(detail, "地址族与来源：IPV4 · 连接层 RemoteAddr") {
+		t.Errorf("?detail=1 应交代地址族与来源：%s", detail)
 	}
 }
 
@@ -206,8 +216,8 @@ func TestRowsAreGroupedByRelevance(t *testing.T) {
 		return -1
 	}
 
-	if labels[0] != "是否信创" || labels[1] != "IP 地址" {
-		t.Errorf("结论与 IP 必须打头：%v", labels)
+	if labels[0] != "IP 地址" || labels[1] != "是否信创" {
+		t.Errorf("IP 与结论必须打头：%v", labels)
 	}
 	// 强关联的行必须相邻：系统家族↔系统版本（中间最多夹一个发行版）、
 	// CPU 架构↔核心数↔内存、GPU 结论↔GPU 原始串。
@@ -222,26 +232,24 @@ func TestRowsAreGroupedByRelevance(t *testing.T) {
 	}
 }
 
-// GPU 的结论行与 WebGL 原始串是一组，必须挨着；只有原始串时也不该把结论行挤到别处。
-func TestGPUConclusionSitsNextToRawString(t *testing.T) {
+// WebGL 只参与判定，不上页面：既没有 GPU 结论行也没有原始串行，
+// 但国产显卡串照样要把「是否信创」顶成「是」。
+func TestGPUFeedsTheVerdictButStaysOffThePage(t *testing.T) {
 	const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 	payload := `{"userAgent":"` + ua + `","gpu":{"vendor":"Jingjia Micro","renderer":"JM910"}}`
-	labels := mainRowLabels(t, postReport(t, "/report", ua, payload).Body.String())
+	body := postReport(t, "/report", ua, payload).Body.String()
+	labels := mainRowLabels(t, body)
 
-	var gpu, raw = -1, -1
-	for i, l := range labels {
-		switch l {
-		case "GPU":
-			gpu = i
-		case "GPU 原始串":
-			raw = i
+	if labels[0] != "IP 地址" || labels[1] != "是否信创" {
+		t.Errorf("IP 与结论必须打头：%v", labels)
+	}
+	for _, absent := range []string{"GPU", "景嘉微", "JM910"} {
+		if strings.Contains(body, absent) {
+			t.Errorf("页面上不该有 GPU 信息 %q：%v", absent, labels)
 		}
 	}
-	if gpu < 0 || raw != gpu+1 {
-		t.Errorf("GPU 两行应相邻：%v", labels)
-	}
-	if labels[0] != "是否信创" {
-		t.Errorf("结论行必须打头：%v", labels)
+	if !strings.Contains(body, `<span class="v" title="是">是</span>`) {
+		t.Errorf("WebGL 仍应参与判定：%s", body)
 	}
 }
 
@@ -349,6 +357,24 @@ func TestStaticRejectsMissingAndTraversal(t *testing.T) {
 	}
 }
 
+// 首行只强调地址本身：归属与是否内网留在行尾，地址族和来源降级到 detail。
+func TestIPCardEmphasizesAddressOnly(t *testing.T) {
+	c := ipCard(Result{Client: IPInfo{IP: "1.2.3.4", Family: "ipv4", Source: "conn", Label: "三分局出口"}}, nil)
+	if c.Value != "1.2.3.4" || !c.Accent {
+		t.Errorf("value = %q, accent = %v, want 1.2.3.4 且带强调", c.Value, c.Accent)
+	}
+	if want := "归属：三分局出口"; c.Detail != want {
+		t.Errorf("detail = %q, want %q", c.Detail, want)
+	}
+	if len(c.Notes) != 1 || c.Notes[0] != "地址族与来源：IPV4 · 连接层 RemoteAddr" {
+		t.Errorf("notes = %v", c.Notes)
+	}
+	// 没取到地址时不该把「未取得」也标红。
+	if missing := ipCard(Result{}, nil); missing.Accent {
+		t.Errorf("未取得地址的行不该有强调标记：%+v", missing)
+	}
+}
+
 func TestBuildViewVerdictRowAndStatus(t *testing.T) {
 	d := builtinDetector(t)
 	ss, ev := Collect(reqWith(map[string]string{"User-Agent": "Mozilla/5.0 (X11; UOS; Linux x86_64) Chrome/120"}))
@@ -437,14 +463,18 @@ func TestBuildViewIPCardCombinesLabelAndNotes(t *testing.T) {
 	}, Evidence: []Evidence{{Key: "header.x-forwarded-for", Raw: "2.46.0.7", Source: SourceIP}}}
 	card := ipCard(res, res.Evidence)
 
-	if !strings.Contains(card.Value, "三分局出口") || !strings.Contains(card.Value, "2.46.0.7") {
+	// 归属是地址的注脚，进行尾摘要；值只留地址，强调才只落在地址上。
+	if card.Value != "2.46.0.7" {
 		t.Errorf("value = %q", card.Value)
 	}
-	if !strings.Contains(card.Detail, "X-Forwarded-For") {
-		t.Errorf("detail = %q", card.Detail)
+	if want := "归属：三分局出口"; card.Detail != want {
+		t.Errorf("detail = %q, want %q", card.Detail, want)
 	}
-	if len(card.Notes) != 1 || len(card.Evidence) != 1 {
-		t.Errorf("notes=%v evidence=%v", card.Notes, card.Evidence)
+	if len(card.Notes) != 2 || card.Notes[0] != "地址族与来源：IPV4 · 受信代理转发的 X-Forwarded-For" {
+		t.Errorf("notes = %v", card.Notes)
+	}
+	if len(card.Evidence) != 1 {
+		t.Errorf("evidence = %v", card.Evidence)
 	}
 }
 

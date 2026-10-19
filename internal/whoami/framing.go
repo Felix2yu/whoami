@@ -106,11 +106,12 @@ func splitKeys(list string) []string {
 	return out
 }
 
-// allCardKeys 是 ?hide=/?only= 能控制的开关集合。
+// allCardKeys 是 ?hide=/?only= 能控制的开关集合。GPU 不在其中：它压根不上页面，
+// 没有可关的行。
 func allCardKeys() []string {
 	return []string{
-		KeyVerdict, "ip", CatOS, CatCPU, CatBrowser, CatGPU, CatPlatform, CatEngine,
-		"cores", "memory", "screen", "timezone", "model", "platformV", "gpuRaw", "hints", "geo",
+		KeyVerdict, "ip", CatOS, CatCPU, CatBrowser, CatPlatform, CatEngine,
+		"cores", "memory", "screen", "timezone", "model", "platformV", "hints", "geo",
 		"extras", "evidence",
 	}
 }

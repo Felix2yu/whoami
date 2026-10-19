@@ -10,6 +10,7 @@
   --warn-bg: #fffbeb;
   --unknown: #374151;
   --unknown-bg: #f3f4f6;
+  --hot: #b91c1c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +26,7 @@
     --warn-bg: #3a2c05;
     --unknown: #cbd5e1;
     --unknown-bg: #262a31;
+    --hot: #f87171;
   }
 }
 
@@ -110,12 +112,14 @@ summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .kv th, .kv td { border-top: 1px solid var(--line); padding: 4px 0; word-break: break-all; }
 .kv td { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
-/* 结果表：默认视图只有这一张表，一行一个事实，不做视觉分级。
+/* 结果表：默认视图只有这一张表，一行一个事实；
+   只有标了 Accent 的行（IP 地址）把值加粗标红，供行内信息多时一眼定位。
    用子选择器而不是后代，免得 ?detail=1 时行内嵌套的证据表也被套用。 */
 table.rows { margin-top: 0; }
 .rows > tbody > tr > th { width: 9em; }
 .rows > tbody > tr > td { font-size: 14px; }
 .rows > tbody > tr > td > p { margin: 2px 0 0; }
+.rows > tbody > tr > td.hot > .v { color: var(--hot); font-weight: 600; }
 
 .more {
   border: 1px solid var(--line);

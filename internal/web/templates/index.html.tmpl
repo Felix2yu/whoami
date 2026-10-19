@@ -3,7 +3,7 @@
 <table class="kv rows"><tbody>{{range .Rows}}
   <tr>
     <th>{{.Title}}</th>
-    <td><span class="v" title="{{.Value}}">{{.Value}}</span>{{if .Detail}}<span class="muted"> · {{.Detail}}</span>{{end}}{{- if $.Detail}}
+    <td{{if .Accent}} class="hot"{{end}}><span class="v" title="{{.Value}}">{{.Value}}</span>{{if .Detail}}<span class="muted"> · {{.Detail}}</span>{{end}}{{- if $.Detail}}
       {{- if .Sources}}
       <p class="muted">来源：{{$first := true}}{{range .Sources}}{{if $first}}{{$first = false}}{{else}} + {{end}}{{.}}{{end}}</p>
       {{- end}}{{range .Notes}}
